@@ -8,8 +8,9 @@
   "dependencies": {
     "express": "^4.18.2",
     "@line/bot-sdk": "^7.5.0",
-    "dotenv": "^16.4.0"
-    "googleapis": "^126.0.1"
+    "googleapis": "^133.0.0",
+    "dotenv": "^16.0.3"
   }
 }
+
 
