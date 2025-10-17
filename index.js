@@ -49,35 +49,38 @@ async function handleMessage(event) {
 async function recordToSheet({ product, quantity }) {
   const spreadsheetId = process.env.GOOGLE_SHEET_ID;
   const sheetName = "発注記録";
-
   const now = new Date();
   const date = now.toLocaleDateString("ja-JP");
 
-  // 例として：A列=日付、B列=商品、C列=残数、D列=発注数
-  if (product && !quantity) {
-    await sheets.spreadsheets.values.append({
-      spreadsheetId,
-      range: `${sheetName}!A:D`,
-      valueInputOption: "USER_ENTERED",
-      requestBody: { values: [[date, product, "", ""]] },
-    });
-    return "OK";
-  }
+  try {
+    if (product && !quantity) {
+      await sheets.spreadsheets.values.append({
+        spreadsheetId,
+        range: `${sheetName}!A:D`,
+        valueInputOption: "USER_ENTERED",
+        requestBody: { values: [[date, product, "", ""]] },
+      });
+      console.log("✅ 商品登録完了:", product);
+      return "OK";
+    }
 
-  if (quantity) {
-    // ここでは仮で単純な計算にする：発注数 = (10 - 残数)
-    const orderAmount = Math.max(0, 10 - quantity);
+    if (quantity) {
+      const orderAmount = Math.max(0, 10 - quantity);
 
-    await sheets.spreadsheets.values.append({
-      spreadsheetId,
-      range: `${sheetName}!A:D`,
-      valueInputOption: "USER_ENTERED",
-      requestBody: { values: [[date, "", quantity, orderAmount]] },
-    });
+      await sheets.spreadsheets.values.append({
+        spreadsheetId,
+        range: `${sheetName}!A:D`,
+        valueInputOption: "USER_ENTERED",
+        requestBody: { values: [[date, "", quantity, orderAmount]] },
+      });
 
-    return orderAmount;
+      console.log("✅ 数量登録完了:", quantity, "→ 発注数:", orderAmount);
+      return orderAmount;
+    }
+  } catch (error) {
+    console.error("❌ Sheetsエラー:", error.message);
+    console.error(error.stack);
+    return "エラー";
   }
 }
 
-app.get("/", (req, res) => res.send("LINE Webhook server is running."));
-app.listen(3000, () => console.log("Server running"));
