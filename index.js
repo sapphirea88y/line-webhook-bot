@@ -84,3 +84,9 @@ async function recordToSheet({ product, quantity }) {
   }
 }
 
+app.get("/", (req, res) => res.send("LINE Webhook server is running."));
+
+// Render用ポート設定
+const PORT = process.env.PORT || 3000;
+app.listen(PORT, () => console.log(`✅ Server running on port ${PORT}`));
+
