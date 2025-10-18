@@ -101,27 +101,36 @@ async function handleMessage(event) {
     }
 
     // --- 数字入力（キャベツ→プリン→カレーの順固定） ---
-    if (!isNaN(text)) {
-      const nextStep = await handleFixedOrderInput(userId, Number(text));
+if (!isNaN(text)) {
+  const nextStep = await handleFixedOrderInput(userId, Number(text));
 
-      if (nextStep === "プリン") {
-        await client.replyMessage(event.replyToken, {
-          type: "text",
-          text: "プリンの残数を数字で入力してください。",
-        });
-      } else if (nextStep === "カレー") {
-        await client.replyMessage(event.replyToken, {
-          type: "text",
-          text: "カレーの残数を数字で入力してください。",
-        });
-      } else if (nextStep === "完了") {
-        await client.replyMessage(event.replyToken, {
-          type: "text",
-          text: "３つの商品すべて入力されました。\n登録しますか？（はい／いいえ）",
-        });
-      }
-      return;
-    }
+  // 入力中データが存在しなければ nextStep は undefined
+  if (!nextStep) {
+    await client.replyMessage(event.replyToken, {
+      type: "text",
+      text: "使い方",
+    });
+    return;
+  }
+
+  if (nextStep === "プリン") {
+    await client.replyMessage(event.replyToken, {
+      type: "text",
+      text: "プリンの残数を数字で入力してください。",
+    });
+  } else if (nextStep === "カレー") {
+    await client.replyMessage(event.replyToken, {
+      type: "text",
+      text: "カレーの残数を数字で入力してください。",
+    });
+  } else if (nextStep === "完了") {
+    await client.replyMessage(event.replyToken, {
+      type: "text",
+      text: "３つの商品すべて入力されました。\n登録しますか？（はい／いいえ）",
+    });
+  }
+  return;
+}
 
     // --- 訂正（仮） ---
     if (text === "訂正") {
@@ -334,4 +343,5 @@ async function finalizeRecord(userId, replyToken) {
 app.get("/", (req, res) => res.send("LINE Webhook server is running."));
 const PORT = process.env.PORT || 3000;
 app.listen(PORT, () => console.log(`✅ Server running on port ${PORT}`));
+
 
