@@ -267,18 +267,28 @@ async function handleCorrectionStart(userId, replyToken) {
 
 // ===== 入力中フロー =====
 async function handleInputFlow(userId, quantity, replyToken) {
-  const temp = await getTempData(userId);
+  const spreadsheetId = process.env.GOOGLE_SHEET_ID;
+  const tempSheet = "入力中";
+  const date = getJSTDateString();
 
-  // 現在の入力対象を決定
-  const currentProduct = !temp ? "キャベツ" : temp;
-  await recordTempData(userId, currentProduct, quantity);
+  // 現在のユーザーの入力状況を取得
+  const res = await sheets.spreadsheets.values.get({
+    spreadsheetId,
+    range: `${tempSheet}!A:D`,
+  });
+  const rows = res.data.values || [];
+  const todayRows = rows.filter(r => r[0] === userId && r[1] === date);
 
-  // 次に進む商品を決める
-  const nextProduct =
-    currentProduct === "キャベツ" ? "プリン" :
-    currentProduct === "プリン" ? "カレー" : null;
+  // 入力済みの商品名を列挙
+  const done = todayRows.map(r => r[2]);
+  const all = ["キャベツ", "プリン", "カレー"];
 
-  if (!nextProduct) {
+  // まだのものを抽出
+  const remaining = all.filter(p => !done.includes(p));
+
+  // 現在入力している商品
+  const currentProduct = remaining.length === 0 ? null : remaining[0];
+  if (!currentProduct) {
     await client.replyMessage(replyToken, {
       type: "text",
       text: "３つすべての入力が完了しました。登録しますか？（はい／いいえ）",
@@ -286,11 +296,25 @@ async function handleInputFlow(userId, quantity, replyToken) {
     await setUserState(userId, "登録確認中");
     return;
   }
-  
-  await recordTempData(userId, nextProduct, quantity);
+
+  // 現在の商品を登録
+  await recordTempData(userId, currentProduct, quantity);
+
+  // 次に聞く商品を決定
+  const nextRemaining = all.filter(p => ![...done, currentProduct].includes(p));
+  if (nextRemaining.length === 0) {
+    await client.replyMessage(replyToken, {
+      type: "text",
+      text: "３つすべての入力が完了しました。登録しますか？（はい／いいえ）",
+    });
+    await setUserState(userId, "登録確認中");
+    return;
+  }
+
+  // 次の商品を質問
   await client.replyMessage(replyToken, {
     type: "text",
-    text: `${nextProduct}の残数を数字で入力してください。`,
+    text: `${nextRemaining[0]}の残数を数字で入力してください。`,
   });
 }
 
@@ -496,6 +520,7 @@ async function finalizeRecord(userId, replyToken) {
 app.get("/", (req, res) => res.send("LINE Webhook server is running."));
 const PORT = process.env.PORT || 3000;
 app.listen(PORT, () => console.log(`✅ Server running on port ${PORT}`));
+
 
 
 
