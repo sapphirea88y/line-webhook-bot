@@ -363,7 +363,7 @@ async function updateRecord(product, userId) {
 async function isInputCompleteForToday(userId) {
   const spreadsheetId = process.env.GOOGLE_SHEET_ID;
   const sheet = "発注記録";
-  const date = getJSTDateString();  // "YYYY-MM-DD" 形式に統一している前提
+  const date = getJSTDateString(); // ← これが "YYYY/MM/DD" になる
 
   const res = await sheets.spreadsheets.values.get({
     spreadsheetId,
@@ -378,7 +378,6 @@ async function isInputCompleteForToday(userId) {
   const required = ["キャベツ", "プリン", "カレー"];
   return required.every(p => todayRows.some(r => r[2] === p));
 }
-
 
 // ===== 一時データ操作 =====
 async function recordTempData(userId, product, quantity) {
@@ -519,6 +518,7 @@ async function finalizeRecord(userId, replyToken) {
 app.get("/", (req, res) => res.send("LINE Webhook server is running."));
 const PORT = process.env.PORT || 3000;
 app.listen(PORT, () => console.log(`✅ Server running on port ${PORT}`));
+
 
 
 
