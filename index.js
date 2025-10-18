@@ -36,7 +36,7 @@ app.post("/webhook", middleware(config), async (req, res) => {
   res.sendStatus(200);
 });
 
-// ===== メインメッセージ処理 =====
+// ===== メイン処理 =====
 async function handleMessage(event) {
   const userId = event.source.userId;
   const text = event.message.text.trim();
@@ -207,9 +207,7 @@ async function handleMessage(event) {
   }
 }
 
-// ===== 各種処理関数 =====
-
-// 入力開始
+// ===== 入力開始 =====
 async function handleInputStart(userId, replyToken) {
   const date = getJSTDateString();
   await setUserState(userId, "入力確認中");
@@ -219,7 +217,7 @@ async function handleInputStart(userId, replyToken) {
   });
 }
 
-// 訂正開始
+// ===== 訂正開始 =====
 async function handleCorrectionStart(userId, replyToken) {
   const date = getJSTDateString();
   await setUserState(userId, "訂正確認中");
@@ -229,9 +227,8 @@ async function handleCorrectionStart(userId, replyToken) {
   });
 }
 
-// 入力中フロー
+// ===== 入力中フロー =====
 async function handleInputFlow(userId, quantity, replyToken) {
-  const date = getJSTDateString();
   const temp = await getTempData(userId);
   const nextProduct =
     !temp ? "キャベツ" : temp === "キャベツ" ? "プリン" : temp === "プリン" ? "カレー" : null;
@@ -252,7 +249,7 @@ async function handleInputFlow(userId, quantity, replyToken) {
   });
 }
 
-// 発注記録上書き
+// ===== 発注記録 上書き（発注数はスプシ側で計算） =====
 async function updateRecord(product, userId) {
   const spreadsheetId = process.env.GOOGLE_SHEET_ID;
   const sheet = "発注記録";
@@ -264,28 +261,37 @@ async function updateRecord(product, userId) {
   });
 
   const rows = res.data.values || [];
-  const idx = rows.findIndex((r) => r[0] === date && r[2] === product);
-  if (idx === -1) return;
+  const idx = rows.findIndex((r) => r[0] === date && r[2] === product && r[5] === userId);
+  if (idx === -1) {
+    console.log("⚠ 該当行が見つかりません:", date, product, userId);
+    return;
+  }
 
-  // 入力中シートから最新値取得
   const tempRes = await sheets.spreadsheets.values.get({
     spreadsheetId,
     range: "入力中!A:D",
   });
   const tempRows = tempRes.data.values || [];
   const last = tempRows.reverse().find((r) => r[0] === userId && r[2] === product);
-  const newQty = last ? last[3] : "";
+  const newQty = last ? Number(last[3]) : null;
+  if (newQty === null) {
+    console.log("⚠ 新しい数量が見つかりません");
+    return;
+  }
 
-  rows[idx][3] = newQty; // 残数上書き
+  rows[idx][3] = newQty; // D列（残数）のみ上書き
+
   await sheets.spreadsheets.values.update({
     spreadsheetId,
     range: `${sheet}!A${idx + 1}:F${idx + 1}`,
     valueInputOption: "USER_ENTERED",
     requestBody: { values: [rows[idx]] },
   });
+
+  console.log(`✅ ${product} の残数を ${newQty} に訂正`);
 }
 
-// 一時データ操作
+// ===== 一時データ操作 =====
 async function recordTempData(userId, product, quantity) {
   const spreadsheetId = process.env.GOOGLE_SHEET_ID;
   const sheet = "入力中";
@@ -311,7 +317,7 @@ async function getTempData(userId) {
   return userRows.length > 0 ? userRows[userRows.length - 1][2] : null;
 }
 
-// 状態管理
+// ===== 状態管理 =====
 async function getUserState(userId) {
   const spreadsheetId = process.env.GOOGLE_SHEET_ID;
   const res = await sheets.spreadsheets.values.get({
@@ -349,7 +355,7 @@ async function setUserState(userId, state) {
   }
 }
 
-// 仮データ削除
+// ===== 仮データ削除 =====
 async function clearTempData(userId) {
   const spreadsheetId = process.env.GOOGLE_SHEET_ID;
   const sheet = "入力中";
