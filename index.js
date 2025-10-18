@@ -25,9 +25,8 @@ function getJSTDateString() {
   const y = jst.getFullYear();
   const m = String(jst.getMonth() + 1).padStart(2, "0");
   const d = String(jst.getDate()).padStart(2, "0");
-  return `${y}-${m}-${d}`;
+  return `${y}/${m}/${d}`; // ← スラッシュ区切り
 }
-
 
 // ===== Webhook =====
 app.post("/webhook", middleware(config), async (req, res) => {
@@ -520,6 +519,7 @@ async function finalizeRecord(userId, replyToken) {
 app.get("/", (req, res) => res.send("LINE Webhook server is running."));
 const PORT = process.env.PORT || 3000;
 app.listen(PORT, () => console.log(`✅ Server running on port ${PORT}`));
+
 
 
 
