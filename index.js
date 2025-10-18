@@ -22,8 +22,12 @@ const sheets = google.sheets({ version: "v4", auth: sheetsAuth });
 function getJSTDateString() {
   const now = new Date();
   const jst = new Date(now.getTime() + 9 * 60 * 60 * 1000);
-  return jst.toLocaleDateString("ja-JP");
+  const y = jst.getFullYear();
+  const m = String(jst.getMonth() + 1).padStart(2, "0");
+  const d = String(jst.getDate()).padStart(2, "0");
+  return `${y}-${m}-${d}`;
 }
+
 
 // ===== Webhook =====
 app.post("/webhook", middleware(config), async (req, res) => {
@@ -282,14 +286,7 @@ async function handleInputFlow(userId, quantity, replyToken) {
     await setUserState(userId, "登録確認中");
     return;
   }
-
-  await client.replyMessage(replyToken, {
-    type: "text",
-    text: `${nextProduct}の残数を数字で入力してください。`,
-  });
-}
-
-
+  
   await recordTempData(userId, nextProduct, quantity);
   await client.replyMessage(replyToken, {
     type: "text",
@@ -453,7 +450,7 @@ async function finalizeRecord(userId, replyToken) {
   const tempSheet = "入力中";
   const mainSheet = "発注記録";
   const date = getJSTDateString();
-  const day = new Date().toLocaleDateString("ja-JP", { weekday: "short" });
+  const day = new Date(Date.now() + 9 * 60 * 60 * 1000).toLocaleDateString("ja-JP", { weekday: "short" });
 
   const res = await sheets.spreadsheets.values.get({
     spreadsheetId,
@@ -499,5 +496,6 @@ async function finalizeRecord(userId, replyToken) {
 app.get("/", (req, res) => res.send("LINE Webhook server is running."));
 const PORT = process.env.PORT || 3000;
 app.listen(PORT, () => console.log(`✅ Server running on port ${PORT}`));
+
 
 
