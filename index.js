@@ -17,7 +17,7 @@ const sheetsAuth = new google.auth.GoogleAuth({
 });
 const sheets = google.sheets({ version: "v4", auth: sheetsAuth });
 
-// --- JSTの日付取得（UTC対策） ---
+// --- JST日付取得 ---
 function getJstDateString() {
   const now = new Date();
   const jst = new Date(now.getTime() + 9 * 60 * 60 * 1000);
@@ -42,25 +42,7 @@ async function handleMessage(event) {
   const today = getJstDateString();
   const state = await getUserState(userId);
 
-  // --- 入力コマンド ---
-  if (text === "入力") {
-    const alreadyDone = await checkIfInputDone(userId, today);
-    if (alreadyDone) {
-      await client.replyMessage(event.replyToken, {
-        type: "text",
-        text: `${today} は入力済みです。\n訂正する場合は「訂正」と送信してください。`,
-      });
-      return;
-    }
-    await setUserState(userId, "確認中");
-    await client.replyMessage(event.replyToken, {
-      type: "text",
-      text: `${today} の入力を始めますか？（はい／いいえ）`,
-    });
-    return;
-  }
-
-  // --- 入力中のときの制御 ---
+  // --- 入力中の特別制御 ---
   if (state === "入力中") {
     if (text === "キャンセル") {
       await clearTempData(userId);
@@ -81,7 +63,25 @@ async function handleMessage(event) {
     }
   }
 
-  // --- 「はい」または「いいえ」処理（入力開始確認） ---
+  // --- 「入力」開始 ---
+  if (text === "入力") {
+    const alreadyDone = await checkIfInputDone(userId, today);
+    if (alreadyDone) {
+      await client.replyMessage(event.replyToken, {
+        type: "text",
+        text: `${today} は入力済みです。\n訂正する場合は「訂正」と送信してください。`,
+      });
+      return;
+    }
+    await setUserState(userId, "確認中");
+    await client.replyMessage(event.replyToken, {
+      type: "text",
+      text: `${today} の入力を始めますか？（はい／いいえ）`,
+    });
+    return;
+  }
+
+  // --- 「はい／いいえ」（入力確認） ---
   if (state === "確認中") {
     if (text === "はい") {
       await clearTempData(userId);
@@ -108,28 +108,19 @@ async function handleMessage(event) {
     }
   }
 
-  // --- 数字入力（キャベツ→プリン→カレーの順固定） ---
+  // --- 数字入力（キャベツ→プリン→カレー） ---
   if (!isNaN(text)) {
     const nextStep = await handleFixedOrderInput(userId, Number(text));
 
     if (!nextStep) {
-      await client.replyMessage(event.replyToken, {
-        type: "text",
-        text: "使い方",
-      });
+      await client.replyMessage(event.replyToken, { type: "text", text: "使い方" });
       return;
     }
 
     if (nextStep === "プリン") {
-      await client.replyMessage(event.replyToken, {
-        type: "text",
-        text: "プリンの残数を数字で入力してください。",
-      });
+      await client.replyMessage(event.replyToken, { type: "text", text: "プリンの残数を数字で入力してください。" });
     } else if (nextStep === "カレー") {
-      await client.replyMessage(event.replyToken, {
-        type: "text",
-        text: "カレーの残数を数字で入力してください。",
-      });
+      await client.replyMessage(event.replyToken, { type: "text", text: "カレーの残数を数字で入力してください。" });
     } else if (nextStep === "完了") {
       await client.replyMessage(event.replyToken, {
         type: "text",
@@ -140,7 +131,7 @@ async function handleMessage(event) {
     return;
   }
 
-  // --- 登録確認中のはい／いいえ ---
+  // --- 「はい／いいえ」（登録確認） ---
   if (state === "登録確認中") {
     if (text === "はい") {
       await finalizeRecord(userId, event.replyToken);
@@ -163,105 +154,9 @@ async function handleMessage(event) {
     }
   }
 
-  // --- 入力・訂正・確認の以外は「使い方」 ---
+  // --- 入力・訂正・確認 以外 ---
   if (!["入力", "訂正", "確認"].includes(text)) {
-    await client.replyMessage(event.replyToken, {
-      type: "text",
-      text: "使い方",
-    });
-  }
-}
-
-
-  // 「はい」または「いいえ」処理
-  const state = await getUserState(userId);
-  if (state === "確認中") {
-    if (text === "はい") {
-      await clearTempData(userId);
-      await recordTempData(userId, today, "キャベツ");
-      await setUserState(userId, "入力中");
-      await client.replyMessage(event.replyToken, {
-        type: "text",
-        text: "キャベツの残数を数字で入力してください。",
-      });
-      return;
-    } else if (text === "いいえ") {
-      await setUserState(userId, "通常");
-      await client.replyMessage(event.replyToken, {
-        type: "text",
-        text: "入力をキャンセルしました。",
-      });
-      return;
-    } else {
-      await client.replyMessage(event.replyToken, {
-        type: "text",
-        text: "「はい」または「いいえ」と送信してください。",
-      });
-      return;
-    }
-  }
-
-  // --- 数字入力（キャベツ→プリン→カレーの順固定） ---
-  if (!isNaN(text)) {
-    const nextStep = await handleFixedOrderInput(userId, Number(text));
-
-    if (!nextStep) {
-      await client.replyMessage(event.replyToken, {
-        type: "text",
-        text: "使い方",
-      });
-      return;
-    }
-
-    if (nextStep === "プリン") {
-      await client.replyMessage(event.replyToken, {
-        type: "text",
-        text: "プリンの残数を数字で入力してください。",
-      });
-    } else if (nextStep === "カレー") {
-      await client.replyMessage(event.replyToken, {
-        type: "text",
-        text: "カレーの残数を数字で入力してください。",
-      });
-    } else if (nextStep === "完了") {
-      await client.replyMessage(event.replyToken, {
-        type: "text",
-        text: "３つの商品すべて入力されました。\n登録しますか？（はい／いいえ）",
-      });
-      await setUserState(userId, "登録確認中");
-    }
-    return;
-  }
-
-  // --- 登録確認中のはい／いいえ ---
-  if (state === "登録確認中") {
-    if (text === "はい") {
-      await finalizeRecord(userId, event.replyToken);
-      await setUserState(userId, "通常");
-      return;
-    } else if (text === "いいえ") {
-      await clearTempData(userId);
-      await setUserState(userId, "通常");
-      await client.replyMessage(event.replyToken, {
-        type: "text",
-        text: "登録をキャンセルしました。",
-      });
-      return;
-    } else {
-      await client.replyMessage(event.replyToken, {
-        type: "text",
-        text: "「はい」または「いいえ」と送信してください。",
-      });
-      return;
-    }
-  }
-
-  // --- 入力・訂正・確認の以外は「使い方」 ---
-  if (!["入力", "訂正", "確認"].includes(text)) {
-    await client.replyMessage(event.replyToken, {
-      type: "text",
-      text: "使い方",
-    });
+    await client.replyMessage(event.replyToken, { type: "text", text: "使い方" });
   }
 }
 
@@ -300,9 +195,7 @@ async function handleFixedOrderInput(userId, quantity) {
     spreadsheetId,
     range: `${tempSheet}!A${rows.length}:E${rows.length}`,
     valueInputOption: "USER_ENTERED",
-    requestBody: {
-      values: [[userId, date, current, quantity, "入力済"]],
-    },
+    requestBody: { values: [[userId, date, current, quantity, "入力済"]] },
   });
 
   if (nextIndex < order.length - 1) {
@@ -364,10 +257,7 @@ async function clearTempData(userId) {
   });
   const rows = res.data.values || [];
   const filtered = rows.filter(r => r[0] !== userId);
-  await sheets.spreadsheets.values.clear({
-    spreadsheetId,
-    range: `${tempSheet}!A:E`,
-  });
+  await sheets.spreadsheets.values.clear({ spreadsheetId, range: `${tempSheet}!A:E` });
   if (filtered.length > 0) {
     await sheets.spreadsheets.values.update({
       spreadsheetId,
@@ -417,4 +307,3 @@ async function getUserState(userId) {
 app.get("/", (req, res) => res.send("LINE Webhook server is running."));
 const PORT = process.env.PORT || 3000;
 app.listen(PORT, () => console.log(`✅ Server running on port ${PORT}`));
-
