@@ -35,14 +35,14 @@ app.post("/webhook", middleware(config), async (req, res) => {
   res.sendStatus(200);
 });
 
-// --- メイン処理 ---
 async function handleMessage(event) {
   const userId = event.source.userId;
   const text = event.message.text.trim();
-  const today = getJstDateString();
+
+  // 現在の状態を取得
   const state = await getUserState(userId);
 
-  // --- 入力中の特別制御 ---
+  // --- 入力中のときの特別処理 ---
   if (state === "入力中") {
     if (text === "キャンセル") {
       await clearTempData(userId);
@@ -63,41 +63,18 @@ async function handleMessage(event) {
     }
   }
 
-  // --- 「入力」開始 ---
-  if (text === "入力") {
-    const alreadyDone = await checkIfInputDone(userId, today);
-    if (alreadyDone) {
-      await client.replyMessage(event.replyToken, {
-        type: "text",
-        text: `${today} は入力済みです。\n訂正する場合は「訂正」と送信してください。`,
-      });
-      return;
-    }
-    await setUserState(userId, "確認中");
-    await client.replyMessage(event.replyToken, {
-      type: "text",
-      text: `${today} の入力を始めますか？（はい／いいえ）`,
-    });
-    return;
-  }
-
-  // --- 「はい／いいえ」（入力確認） ---
+  // --- 「はい」「いいえ」の共通処理（入力確認中など） ---
   if (state === "確認中") {
     if (text === "はい") {
-      await clearTempData(userId);
-      await recordTempData(userId, today, "キャベツ");
-      await setUserState(userId, "入力中");
-      await client.replyMessage(event.replyToken, {
-        type: "text",
-        text: "キャベツの残数を数字で入力してください。",
-      });
+      await finalizeRecord(userId, event.replyToken);
+      await setUserState(userId, "通常");
       return;
     } else if (text === "いいえ") {
-      await setUserState(userId, "通常");
       await client.replyMessage(event.replyToken, {
         type: "text",
-        text: "入力をキャンセルしました。",
+        text: "入力をやめました。必要なときは「入力」と送信してください。",
       });
+      await setUserState(userId, "通常");
       return;
     } else {
       await client.replyMessage(event.replyToken, {
@@ -107,6 +84,45 @@ async function handleMessage(event) {
       return;
     }
   }
+
+  // --- 通常モード ---
+  if (state === "通常") {
+    if (text === "入力") {
+      await startInputProcess(userId, event.replyToken);
+      return;
+    }
+
+    // ✅ ステップ① 訂正開始
+    else if (text === "訂正") {
+      const now = new Date();
+      const date = now.toLocaleDateString("ja-JP");
+      await setUserState(userId, "訂正確認中");
+      await client.replyMessage(event.replyToken, {
+        type: "text",
+        text: `${date} の入力を訂正しますか？\nはい／いいえ`,
+      });
+      return;
+    }
+
+    else if (text === "確認") {
+      await showLatestRecord(userId, event.replyToken);
+      return;
+    }
+
+    else {
+      await client.replyMessage(event.replyToken, {
+        type: "text",
+        text: "使い方:\n・「入力」で本日の入力を開始\n・「訂正」で過去の修正\n・「確認」で最新の記録を表示",
+      });
+      return;
+    }
+  }
+
+  // --- 訂正確認中のとき（次ステップで実装） ---
+  if (state === "訂正確認中") {
+    // ここは次に「はい／いいえ」判定を追加予定
+  }
+}
 
   // --- 数字入力（キャベツ→プリン→カレー） ---
   if (!isNaN(text)) {
@@ -307,3 +323,4 @@ async function getUserState(userId) {
 app.get("/", (req, res) => res.send("LINE Webhook server is running."));
 const PORT = process.env.PORT || 3000;
 app.listen(PORT, () => console.log(`✅ Server running on port ${PORT}`));
+
