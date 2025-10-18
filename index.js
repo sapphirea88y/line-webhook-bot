@@ -63,16 +63,23 @@ async function handleMessage(event) {
       return;
     }
 
-    // --- 入力開始 ---
+    // --- 「はい」処理（登録 or 開始の見分け） ---
     if (text === "はい") {
-      // もし入力途中なら削除して新規開始
-      await clearTempData(userId);
-      await recordTempData(userId, "キャベツ");
-      await client.replyMessage(event.replyToken, {
-        type: "text",
-        text: "キャベツの残数を数字で入力してください。",
-      });
-      return;
+      const status = await getUserInputStatus(userId);
+
+      if (status === "登録待ち") {
+        await finalizeRecord(userId, event.replyToken);
+        return;
+      } else {
+        // 通常の入力開始
+        await clearTempData(userId);
+        await recordTempData(userId, "キャベツ");
+        await client.replyMessage(event.replyToken, {
+          type: "text",
+          text: "キャベツの残数を数字で入力してください。",
+        });
+        return;
+      }
     }
 
     // --- 入力拒否 ---
@@ -107,22 +114,7 @@ async function handleMessage(event) {
       return;
     }
 
-    // --- 登録確定 ---
-    if (text === "登録" || text === "発注") {
-      await client.replyMessage(event.replyToken, {
-        type: "text",
-        text: "登録には「はい」と返信してください。",
-      });
-      return;
-    }
-
-    // ✅ 「はい」で登録確定
-    if (text === "はい。") {
-      await finalizeRecord(userId, event.replyToken);
-      return;
-    }
-
-    // --- 訂正（仮） ---
+    // --- 訂正（まだ仮） ---
     if (text === "訂正") {
       await client.replyMessage(event.replyToken, {
         type: "text",
@@ -170,9 +162,16 @@ async function handleFixedOrderInput(userId, quantity) {
   rows[targetIndex][3] = quantity;
   rows[targetIndex][4] = "入力済";
 
+  // 次の商品を決定
   const nextProduct = orderList[orderList.indexOf(rows[targetIndex][2]) + 1];
+
   if (nextProduct) {
     await recordTempData(userId, nextProduct);
+  } else {
+    // 全て入力済なら登録待ち状態に更新
+    rows
+      .filter(r => r[0] === userId && r[1] === date)
+      .forEach(r => (r[4] = "入力済"));
   }
 
   await sheets.spreadsheets.values.update({
@@ -228,7 +227,28 @@ async function clearTempData(userId) {
 }
 
 // ======================
-// ✅ 入力済チェック
+// ✅ 入力ステータス判定
+// ======================
+async function getUserInputStatus(userId) {
+  const spreadsheetId = process.env.GOOGLE_SHEET_ID;
+  const tempSheet = "入力中";
+  const date = new Date().toLocaleDateString("ja-JP");
+
+  const res = await sheets.spreadsheets.values.get({
+    spreadsheetId,
+    range: `${tempSheet}!A:E`,
+  });
+  const rows = res.data.values || [];
+  const today = rows.filter(r => r[0] === userId && r[1] === date);
+
+  if (today.length === 3 && today.every(r => r[4] === "入力済")) {
+    return "登録待ち";
+  }
+  return "入力中";
+}
+
+// ======================
+// ✅ 入力済チェック（発注記録）
 // ======================
 async function checkIfInputDone(userId, date) {
   const spreadsheetId = process.env.GOOGLE_SHEET_ID;
