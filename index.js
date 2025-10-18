@@ -18,6 +18,13 @@ const sheetsAuth = new google.auth.GoogleAuth({
 });
 const sheets = google.sheets({ version: "v4", auth: sheetsAuth });
 
+// ===== JST日付関数 =====
+function getJSTDateString() {
+  const now = new Date();
+  const jst = new Date(now.getTime() + 9 * 60 * 60 * 1000);
+  return jst.toLocaleDateString("ja-JP");
+}
+
 // ===== Webhook =====
 app.post("/webhook", middleware(config), async (req, res) => {
   const events = req.body.events;
@@ -37,7 +44,7 @@ async function handleMessage(event) {
 
   console.log(`🗣 ${userId} (${state}) → ${text}`);
 
-  // === キャンセル共通処理 ===
+  // === 共通キャンセル ===
   if (text === "キャンセル") {
     await clearTempData(userId);
     await setUserState(userId, "通常");
@@ -65,7 +72,6 @@ async function handleMessage(event) {
       });
       return;
     }
-
     await client.replyMessage(event.replyToken, {
       type: "text",
       text: "「入力」「訂正」「確認」のいずれかを送信してください。",
@@ -95,6 +101,19 @@ async function handleMessage(event) {
       type: "text",
       text: "「はい」または「いいえ」と送信してください。",
     });
+    return;
+  }
+
+  // === 入力中 ===
+  if (state === "入力中") {
+    if (isNaN(text)) {
+      await client.replyMessage(event.replyToken, {
+        type: "text",
+        text: "数字のみで送信してください。\n入力をやめる場合は「キャンセル」と送信してください。",
+      });
+      return;
+    }
+    await handleInputFlow(userId, Number(text), event.replyToken);
     return;
   }
 
@@ -141,30 +160,58 @@ async function handleMessage(event) {
     return;
   }
 
-  // === 入力中 ===
-  if (state === "入力中") {
+  // === 訂正入力中 ===
+  if (state === "訂正入力中") {
     if (isNaN(text)) {
       await client.replyMessage(event.replyToken, {
         type: "text",
-        text: "数字のみで送信してください。\n入力をやめる場合は「キャンセル」と送信してください。",
+        text: "数字のみで送信してください。\n訂正をやめる場合は「キャンセル」と送信してください。",
       });
       return;
     }
-    await handleInputFlow(userId, Number(text), event.replyToken);
+    const temp = await getTempData(userId);
+    await recordTempData(userId, temp, Number(text)); // 仮保存
+    await setUserState(userId, "訂正確認入力中");
+    await client.replyMessage(event.replyToken, {
+      type: "text",
+      text: `${temp}の残数を${text}に訂正します。よろしいですか？（はい／いいえ）`,
+    });
     return;
   }
 
-  await client.replyMessage(event.replyToken, {
-    type: "text",
-    text: "状態が不明です。「入力」または「訂正」と送信してください。",
-  });
+  // === 訂正確認入力中 ===
+  if (state === "訂正確認入力中") {
+    const temp = await getTempData(userId);
+    if (text === "はい") {
+      await updateRecord(temp, userId);
+      await setUserState(userId, "通常");
+      await client.replyMessage(event.replyToken, {
+        type: "text",
+        text: `${temp}の残数を訂正しました。`,
+      });
+      return;
+    }
+    if (text === "いいえ") {
+      await setUserState(userId, "訂正選択中");
+      await client.replyMessage(event.replyToken, {
+        type: "text",
+        text: "訂正をやり直します。訂正する材料を選んでください。（キャベツ／プリン／カレー）",
+      });
+      return;
+    }
+    await client.replyMessage(event.replyToken, {
+      type: "text",
+      text: "「はい」または「いいえ」と送信してください。",
+    });
+    return;
+  }
 }
 
-// ===== 関数群 =====
+// ===== 各種処理関数 =====
 
-// 入力の最初
+// 入力開始
 async function handleInputStart(userId, replyToken) {
-  const date = new Date().toLocaleDateString("ja-JP");
+  const date = getJSTDateString();
   await setUserState(userId, "入力確認中");
   await client.replyMessage(replyToken, {
     type: "text",
@@ -172,9 +219,9 @@ async function handleInputStart(userId, replyToken) {
   });
 }
 
-// 訂正の最初
+// 訂正開始
 async function handleCorrectionStart(userId, replyToken) {
-  const date = new Date().toLocaleDateString("ja-JP");
+  const date = getJSTDateString();
   await setUserState(userId, "訂正確認中");
   await client.replyMessage(replyToken, {
     type: "text",
@@ -182,18 +229,12 @@ async function handleCorrectionStart(userId, replyToken) {
   });
 }
 
-// 入力中の流れ
+// 入力中フロー
 async function handleInputFlow(userId, quantity, replyToken) {
-  const date = new Date().toLocaleDateString("ja-JP");
+  const date = getJSTDateString();
   const temp = await getTempData(userId);
-
-  const nextProduct = !temp
-    ? "キャベツ"
-    : temp === "キャベツ"
-    ? "プリン"
-    : temp === "プリン"
-    ? "カレー"
-    : null;
+  const nextProduct =
+    !temp ? "キャベツ" : temp === "キャベツ" ? "プリン" : temp === "プリン" ? "カレー" : null;
 
   if (!nextProduct) {
     await client.replyMessage(replyToken, {
@@ -211,34 +252,66 @@ async function handleInputFlow(userId, quantity, replyToken) {
   });
 }
 
-// 一時記録シート書き込み
+// 発注記録上書き
+async function updateRecord(product, userId) {
+  const spreadsheetId = process.env.GOOGLE_SHEET_ID;
+  const sheet = "発注記録";
+  const date = getJSTDateString();
+
+  const res = await sheets.spreadsheets.values.get({
+    spreadsheetId,
+    range: `${sheet}!A:F`,
+  });
+
+  const rows = res.data.values || [];
+  const idx = rows.findIndex((r) => r[0] === date && r[2] === product);
+  if (idx === -1) return;
+
+  // 入力中シートから最新値取得
+  const tempRes = await sheets.spreadsheets.values.get({
+    spreadsheetId,
+    range: "入力中!A:D",
+  });
+  const tempRows = tempRes.data.values || [];
+  const last = tempRows.reverse().find((r) => r[0] === userId && r[2] === product);
+  const newQty = last ? last[3] : "";
+
+  rows[idx][3] = newQty; // 残数上書き
+  await sheets.spreadsheets.values.update({
+    spreadsheetId,
+    range: `${sheet}!A${idx + 1}:F${idx + 1}`,
+    valueInputOption: "USER_ENTERED",
+    requestBody: { values: [rows[idx]] },
+  });
+}
+
+// 一時データ操作
 async function recordTempData(userId, product, quantity) {
   const spreadsheetId = process.env.GOOGLE_SHEET_ID;
-  const sheetName = "入力中";
-  const date = new Date().toLocaleDateString("ja-JP");
+  const sheet = "入力中";
+  const date = getJSTDateString();
   await sheets.spreadsheets.values.append({
     spreadsheetId,
-    range: `${sheetName}!A:D`,
+    range: `${sheet}!A:D`,
     valueInputOption: "USER_ENTERED",
     requestBody: { values: [[userId, date, product, quantity || ""]] },
   });
 }
 
-// 一時記録取得（最後の記録商品）
 async function getTempData(userId) {
   const spreadsheetId = process.env.GOOGLE_SHEET_ID;
-  const sheetName = "入力中";
+  const sheet = "入力中";
   const res = await sheets.spreadsheets.values.get({
     spreadsheetId,
-    range: `${sheetName}!A:D`,
+    range: `${sheet}!A:D`,
   });
   const rows = res.data.values || [];
-  const today = new Date().toLocaleDateString("ja-JP");
+  const today = getJSTDateString();
   const userRows = rows.filter((r) => r[0] === userId && r[1] === today);
   return userRows.length > 0 ? userRows[userRows.length - 1][2] : null;
 }
 
-// 状態取得
+// 状態管理
 async function getUserState(userId) {
   const spreadsheetId = process.env.GOOGLE_SHEET_ID;
   const res = await sheets.spreadsheets.values.get({
@@ -250,7 +323,6 @@ async function getUserState(userId) {
   return row ? row[1] : "通常";
 }
 
-// 状態保存
 async function setUserState(userId, state) {
   const spreadsheetId = process.env.GOOGLE_SHEET_ID;
   const sheet = "状態";
@@ -301,6 +373,7 @@ async function clearTempData(userId) {
   }
 }
 
+// ===== サーバー起動 =====
 app.get("/", (req, res) => res.send("LINE Webhook server is running."));
 const PORT = process.env.PORT || 3000;
 app.listen(PORT, () => console.log(`✅ Server running on port ${PORT}`));
