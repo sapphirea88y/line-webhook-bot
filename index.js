@@ -117,6 +117,27 @@ async function handleMessage(event) {
     return;
   }
 
+  // === 登録確認中 ===
+if (state === "登録確認中") {
+  if (text === "はい") {
+    await finalizeRecord(userId, event.replyToken); // 登録処理を呼ぶ
+    return;
+  }
+  if (text === "いいえ") {
+    await setUserState(userId, "通常");
+    await client.replyMessage(event.replyToken, {
+      type: "text",
+      text: "入力を中止しました。",
+    });
+    return;
+  }
+  await client.replyMessage(event.replyToken, {
+    type: "text",
+    text: "「はい」または「いいえ」と送信してください。",
+  });
+  return;
+}
+
   // === 訂正確認中 ===
   if (state === "訂正確認中") {
     if (text === "はい") {
@@ -243,8 +264,15 @@ async function handleCorrectionStart(userId, replyToken) {
 // ===== 入力中フロー =====
 async function handleInputFlow(userId, quantity, replyToken) {
   const temp = await getTempData(userId);
+
+  // 現在の入力対象を決定
+  const currentProduct = !temp ? "キャベツ" : temp;
+  await recordTempData(userId, currentProduct, quantity);
+
+  // 次に進む商品を決める
   const nextProduct =
-    !temp ? "キャベツ" : temp === "キャベツ" ? "プリン" : temp === "プリン" ? "カレー" : null;
+    currentProduct === "キャベツ" ? "プリン" :
+    currentProduct === "プリン" ? "カレー" : null;
 
   if (!nextProduct) {
     await client.replyMessage(replyToken, {
@@ -254,6 +282,13 @@ async function handleInputFlow(userId, quantity, replyToken) {
     await setUserState(userId, "登録確認中");
     return;
   }
+
+  await client.replyMessage(replyToken, {
+    type: "text",
+    text: `${nextProduct}の残数を数字で入力してください。`,
+  });
+}
+
 
   await recordTempData(userId, nextProduct, quantity);
   await client.replyMessage(replyToken, {
@@ -413,8 +448,56 @@ async function clearTempData(userId) {
   }
 }
 
+async function finalizeRecord(userId, replyToken) {
+  const spreadsheetId = process.env.GOOGLE_SHEET_ID;
+  const tempSheet = "入力中";
+  const mainSheet = "発注記録";
+  const date = getJSTDateString();
+  const day = new Date().toLocaleDateString("ja-JP", { weekday: "short" });
+
+  const res = await sheets.spreadsheets.values.get({
+    spreadsheetId,
+    range: `${tempSheet}!A:D`,
+  });
+
+  const rows = res.data.values || [];
+  const todayRows = rows.filter(r => r[0] === userId && r[1] === date);
+
+  if (todayRows.length < 3) {
+    await client.replyMessage(replyToken, {
+      type: "text",
+      text: "3商品の入力がそろっていません。"
+    });
+    return;
+  }
+
+  for (const r of todayRows) {
+    const [uid, d, product, quantity] = r;
+    await sheets.spreadsheets.values.append({
+      spreadsheetId,
+      range: `${mainSheet}!A:G`,
+      valueInputOption: "USER_ENTERED",
+      requestBody: {
+        values: [[d, day, product, quantity, "", uid, ""]],
+      },
+    });
+  }
+
+  await clearTempData(userId);
+  await setUserState(userId, "通常");
+
+  await client.replyMessage(replyToken, {
+    type: "text",
+    text: "本日の発注データを登録しました。お疲れさまです。",
+  });
+
+  console.log(`✅ ${userId} のデータを発注記録へ移動`);
+}
+
+
 // ===== サーバー起動 =====
 app.get("/", (req, res) => res.send("LINE Webhook server is running."));
 const PORT = process.env.PORT || 3000;
 app.listen(PORT, () => console.log(`✅ Server running on port ${PORT}`));
+
 
