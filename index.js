@@ -4,6 +4,16 @@ const { Client, middleware } = require("@line/bot-sdk");
 const { google } = require("googleapis");
 
 // ======================
+// 🕐 JSTで日付を取得
+// ======================
+function getJstDateString() {
+  const now = new Date();
+  const jst = new Date(now.getTime() + 9 * 60 * 60 * 1000); // UTC→JST(+9h)
+  const [y, m, d] = jst.toISOString().split("T")[0].split("-");
+  return `${y}/${m}/${d}`; // "2025/10/19" のような形式
+}
+
+// ======================
 // 🔧 設定
 // ======================
 const config = {
@@ -42,7 +52,7 @@ app.post("/webhook", middleware(config), async (req, res) => {
 async function handleMessage(event) {
   const userId = event.source.userId;
   const text = event.message.text.trim();
-  const today = new Date().toLocaleDateString("ja-JP");
+  const today = getJstDateString();
 
   try {
     // --- 「入力」で始まる ---
@@ -71,7 +81,6 @@ async function handleMessage(event) {
         await finalizeRecord(userId, event.replyToken);
         return;
       } else {
-        // 通常の入力開始
         await clearTempData(userId);
         await recordTempData(userId, "キャベツ");
         await client.replyMessage(event.replyToken, {
@@ -114,7 +123,7 @@ async function handleMessage(event) {
       return;
     }
 
-    // --- 訂正（まだ仮） ---
+    // --- 訂正（仮） ---
     if (text === "訂正") {
       await client.replyMessage(event.replyToken, {
         type: "text",
@@ -145,7 +154,7 @@ const orderList = ["キャベツ", "プリン", "カレー"];
 async function handleFixedOrderInput(userId, quantity) {
   const spreadsheetId = process.env.GOOGLE_SHEET_ID;
   const tempSheet = "入力中";
-  const date = new Date().toLocaleDateString("ja-JP");
+  const date = getJstDateString();
 
   const res = await sheets.spreadsheets.values.get({
     spreadsheetId,
@@ -153,7 +162,6 @@ async function handleFixedOrderInput(userId, quantity) {
   });
   const rows = res.data.values || [];
 
-  // 最後の未入力行を探す
   const targetIndex = rows.findIndex(
     (r) => r[0] === userId && r[1] === date && r[3] === ""
   );
@@ -162,13 +170,11 @@ async function handleFixedOrderInput(userId, quantity) {
   rows[targetIndex][3] = quantity;
   rows[targetIndex][4] = "入力済";
 
-  // 次の商品を決定
   const nextProduct = orderList[orderList.indexOf(rows[targetIndex][2]) + 1];
 
   if (nextProduct) {
     await recordTempData(userId, nextProduct);
   } else {
-    // 全て入力済なら登録待ち状態に更新
     rows
       .filter(r => r[0] === userId && r[1] === date)
       .forEach(r => (r[4] = "入力済"));
@@ -191,7 +197,7 @@ async function handleFixedOrderInput(userId, quantity) {
 async function recordTempData(userId, product) {
   const spreadsheetId = process.env.GOOGLE_SHEET_ID;
   const tempSheet = "入力中";
-  const date = new Date().toLocaleDateString("ja-JP");
+  const date = getJstDateString();
   await sheets.spreadsheets.values.append({
     spreadsheetId,
     range: `${tempSheet}!A:E`,
@@ -203,7 +209,7 @@ async function recordTempData(userId, product) {
 async function clearTempData(userId) {
   const spreadsheetId = process.env.GOOGLE_SHEET_ID;
   const tempSheet = "入力中";
-  const date = new Date().toLocaleDateString("ja-JP");
+  const date = getJstDateString();
 
   const res = await sheets.spreadsheets.values.get({
     spreadsheetId,
@@ -232,7 +238,7 @@ async function clearTempData(userId) {
 async function getUserInputStatus(userId) {
   const spreadsheetId = process.env.GOOGLE_SHEET_ID;
   const tempSheet = "入力中";
-  const date = new Date().toLocaleDateString("ja-JP");
+  const date = getJstDateString();
 
   const res = await sheets.spreadsheets.values.get({
     spreadsheetId,
@@ -269,7 +275,7 @@ async function finalizeRecord(userId, replyToken) {
   const tempSheet = "入力中";
   const mainSheet = "発注記録";
   const now = new Date();
-  const date = now.toLocaleDateString("ja-JP");
+  const date = getJstDateString();
   const day = now.toLocaleDateString("ja-JP", { weekday: "short" });
 
   try {
@@ -288,11 +294,10 @@ async function finalizeRecord(userId, replyToken) {
       return;
     }
 
-    // 登録処理
     for (const row of todayInputs) {
       const product = row[2];
       const quantity = Number(row[3]);
-      const orderAmount = Math.max(0, 10 - quantity); // 仮の発注式
+      const orderAmount = Math.max(0, 10 - quantity);
 
       await sheets.spreadsheets.values.append({
         spreadsheetId,
@@ -304,7 +309,6 @@ async function finalizeRecord(userId, replyToken) {
       });
     }
 
-    // 仮データ削除
     await clearTempData(userId);
 
     await client.replyMessage(replyToken, {
