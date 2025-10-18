@@ -220,6 +220,19 @@ async function handleInputStart(userId, replyToken) {
 // ===== 訂正開始 =====
 async function handleCorrectionStart(userId, replyToken) {
   const date = getJSTDateString();
+
+  // ★追加：未入力（未確定）なら訂正に入らない
+  const ok = await isInputCompleteForToday(userId);
+  if (!ok) {
+    await setUserState(userId, "通常"); // 念のため戻す（通常状態）
+    await client.replyMessage(replyToken, {
+      type: "text",
+      text: `${date}の入力が完了していません。まず「入力」から3商品を登録してください。`,
+    });
+    return;
+  }
+
+  // ここまで来たら訂正フローへ入る
   await setUserState(userId, "訂正確認中");
   await client.replyMessage(replyToken, {
     type: "text",
@@ -290,6 +303,27 @@ async function updateRecord(product, userId) {
 
   console.log(`✅ ${product} の残数を ${newQty} に訂正`);
 }
+
+// 当日の入力が3商品そろっているか確認（発注記録を参照）
+async function isInputCompleteForToday(userId) {
+  const spreadsheetId = process.env.GOOGLE_SHEET_ID;
+  const sheet = "発注記録";
+  const date = getJSTDateString();  // "YYYY-MM-DD" 形式に統一している前提
+
+  const res = await sheets.spreadsheets.values.get({
+    spreadsheetId,
+    range: `${sheet}!A:F`,
+  });
+  const rows = res.data.values || [];
+
+  // 今日かつこのユーザーの行のみ抽出
+  const todayRows = rows.filter(r => r[0] === date && r[5] === userId);
+
+  // 3品（キャベツ/プリン/カレー）が全部あるか
+  const required = ["キャベツ", "プリン", "カレー"];
+  return required.every(p => todayRows.some(r => r[2] === p));
+}
+
 
 // ===== 一時データ操作 =====
 async function recordTempData(userId, product, quantity) {
@@ -383,3 +417,4 @@ async function clearTempData(userId) {
 app.get("/", (req, res) => res.send("LINE Webhook server is running."));
 const PORT = process.env.PORT || 3000;
 app.listen(PORT, () => console.log(`✅ Server running on port ${PORT}`));
+
