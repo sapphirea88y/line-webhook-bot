@@ -133,10 +133,12 @@ async function handleMessage(event) {
     }
 
     // --- その他のメッセージ ---
-    await client.replyMessage(event.replyToken, {
-      type: "text",
-      text: "数字で入力するか、「入力」と送信して始めてください。",
-    });
+    if (!["入力", "訂正", "確認"].includes(text)) {
+      await client.replyMessage(event.replyToken, {
+        type: "text",
+        text: "使い方",
+      });
+    } 
   } catch (err) {
     console.error("❌ handleMessage error:", err.message);
     await client.replyMessage(event.replyToken, {
@@ -332,3 +334,4 @@ async function finalizeRecord(userId, replyToken) {
 app.get("/", (req, res) => res.send("LINE Webhook server is running."));
 const PORT = process.env.PORT || 3000;
 app.listen(PORT, () => console.log(`✅ Server running on port ${PORT}`));
+
