@@ -63,9 +63,9 @@ async function handleMessage(event) {
       return;
     }
 
-    // --- 入力開始確認 ---
+    // --- 入力開始 ---
     if (text === "はい") {
-      // 未入力データをクリア
+      // もし入力途中なら削除して新規開始
       await clearTempData(userId);
       await recordTempData(userId, "キャベツ");
       await client.replyMessage(event.replyToken, {
@@ -84,7 +84,7 @@ async function handleMessage(event) {
       return;
     }
 
-    // --- 数字入力 ---
+    // --- 数字入力（キャベツ→プリン→カレーの順固定） ---
     if (!isNaN(text)) {
       const nextStep = await handleFixedOrderInput(userId, Number(text));
 
@@ -116,6 +116,13 @@ async function handleMessage(event) {
       return;
     }
 
+    // ✅ 「はい」で登録確定
+    if (text === "はい。") {
+      await finalizeRecord(userId, event.replyToken);
+      return;
+    }
+
+    // --- 訂正（仮） ---
     if (text === "訂正") {
       await client.replyMessage(event.replyToken, {
         type: "text",
@@ -124,6 +131,7 @@ async function handleMessage(event) {
       return;
     }
 
+    // --- その他のメッセージ ---
     await client.replyMessage(event.replyToken, {
       type: "text",
       text: "数字で入力するか、「入力」と送信して始めてください。",
@@ -162,7 +170,6 @@ async function handleFixedOrderInput(userId, quantity) {
   rows[targetIndex][3] = quantity;
   rows[targetIndex][4] = "入力済";
 
-  // 次の商品を決定
   const nextProduct = orderList[orderList.indexOf(rows[targetIndex][2]) + 1];
   if (nextProduct) {
     await recordTempData(userId, nextProduct);
@@ -220,6 +227,9 @@ async function clearTempData(userId) {
   }
 }
 
+// ======================
+// ✅ 入力済チェック
+// ======================
 async function checkIfInputDone(userId, date) {
   const spreadsheetId = process.env.GOOGLE_SHEET_ID;
   const mainSheet = "発注記録";
@@ -229,6 +239,67 @@ async function checkIfInputDone(userId, date) {
   });
   const rows = res.data.values || [];
   return rows.some((r) => r[0] === date && r[5] === userId);
+}
+
+// ======================
+// 📦 確定登録処理
+// ======================
+async function finalizeRecord(userId, replyToken) {
+  const spreadsheetId = process.env.GOOGLE_SHEET_ID;
+  const tempSheet = "入力中";
+  const mainSheet = "発注記録";
+  const now = new Date();
+  const date = now.toLocaleDateString("ja-JP");
+  const day = now.toLocaleDateString("ja-JP", { weekday: "short" });
+
+  try {
+    const res = await sheets.spreadsheets.values.get({
+      spreadsheetId,
+      range: `${tempSheet}!A:E`,
+    });
+    const rows = res.data.values || [];
+    const todayInputs = rows.filter((r) => r[0] === userId && r[1] === date);
+
+    if (todayInputs.length < 3) {
+      await client.replyMessage(replyToken, {
+        type: "text",
+        text: "まだ３商品の入力が完了していません。",
+      });
+      return;
+    }
+
+    // 登録処理
+    for (const row of todayInputs) {
+      const product = row[2];
+      const quantity = Number(row[3]);
+      const orderAmount = Math.max(0, 10 - quantity); // 仮の発注式
+
+      await sheets.spreadsheets.values.append({
+        spreadsheetId,
+        range: `${mainSheet}!A:F`,
+        valueInputOption: "USER_ENTERED",
+        requestBody: {
+          values: [[date, day, product, quantity, orderAmount, userId]],
+        },
+      });
+    }
+
+    // 仮データ削除
+    await clearTempData(userId);
+
+    await client.replyMessage(replyToken, {
+      type: "text",
+      text: "本日の発注データを登録しました。お疲れさまです。",
+    });
+
+    console.log(`✅ ${userId} のデータ確定登録`);
+  } catch (err) {
+    console.error("❌ finalizeRecord エラー:", err.message);
+    await client.replyMessage(replyToken, {
+      type: "text",
+      text: "登録時にエラーが発生しました。",
+    });
+  }
 }
 
 // ======================
