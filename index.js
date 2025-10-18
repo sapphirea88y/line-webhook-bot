@@ -40,8 +40,9 @@ async function handleMessage(event) {
   const userId = event.source.userId;
   const text = event.message.text.trim();
   const today = getJstDateString();
+  const state = await getUserState(userId);
 
-  // 「入力」開始
+  // --- 入力コマンド ---
   if (text === "入力") {
     const alreadyDone = await checkIfInputDone(userId, today);
     if (alreadyDone) {
@@ -58,6 +59,119 @@ async function handleMessage(event) {
     });
     return;
   }
+
+  // --- 入力中のときの制御 ---
+  if (state === "入力中") {
+    if (text === "キャンセル") {
+      await clearTempData(userId);
+      await setUserState(userId, "通常");
+      await client.replyMessage(event.replyToken, {
+        type: "text",
+        text: "入力を中止しました。",
+      });
+      return;
+    }
+
+    if (isNaN(text)) {
+      await client.replyMessage(event.replyToken, {
+        type: "text",
+        text: "数字のみで送信してください。\n入力をやめる場合は「キャンセル」と送信してください。",
+      });
+      return;
+    }
+  }
+
+  // --- 「はい」または「いいえ」処理（入力開始確認） ---
+  if (state === "確認中") {
+    if (text === "はい") {
+      await clearTempData(userId);
+      await recordTempData(userId, today, "キャベツ");
+      await setUserState(userId, "入力中");
+      await client.replyMessage(event.replyToken, {
+        type: "text",
+        text: "キャベツの残数を数字で入力してください。",
+      });
+      return;
+    } else if (text === "いいえ") {
+      await setUserState(userId, "通常");
+      await client.replyMessage(event.replyToken, {
+        type: "text",
+        text: "入力をキャンセルしました。",
+      });
+      return;
+    } else {
+      await client.replyMessage(event.replyToken, {
+        type: "text",
+        text: "「はい」または「いいえ」と送信してください。",
+      });
+      return;
+    }
+  }
+
+  // --- 数字入力（キャベツ→プリン→カレーの順固定） ---
+  if (!isNaN(text)) {
+    const nextStep = await handleFixedOrderInput(userId, Number(text));
+
+    if (!nextStep) {
+      await client.replyMessage(event.replyToken, {
+        type: "text",
+        text: "使い方",
+      });
+      return;
+    }
+
+    if (nextStep === "プリン") {
+      await client.replyMessage(event.replyToken, {
+        type: "text",
+        text: "プリンの残数を数字で入力してください。",
+      });
+    } else if (nextStep === "カレー") {
+      await client.replyMessage(event.replyToken, {
+        type: "text",
+        text: "カレーの残数を数字で入力してください。",
+      });
+    } else if (nextStep === "完了") {
+      await client.replyMessage(event.replyToken, {
+        type: "text",
+        text: "３つの商品すべて入力されました。\n登録しますか？（はい／いいえ）",
+      });
+      await setUserState(userId, "登録確認中");
+    }
+    return;
+  }
+
+  // --- 登録確認中のはい／いいえ ---
+  if (state === "登録確認中") {
+    if (text === "はい") {
+      await finalizeRecord(userId, event.replyToken);
+      await setUserState(userId, "通常");
+      return;
+    } else if (text === "いいえ") {
+      await clearTempData(userId);
+      await setUserState(userId, "通常");
+      await client.replyMessage(event.replyToken, {
+        type: "text",
+        text: "登録をキャンセルしました。",
+      });
+      return;
+    } else {
+      await client.replyMessage(event.replyToken, {
+        type: "text",
+        text: "「はい」または「いいえ」と送信してください。",
+      });
+      return;
+    }
+  }
+
+  // --- 入力・訂正・確認の以外は「使い方」 ---
+  if (!["入力", "訂正", "確認"].includes(text)) {
+    await client.replyMessage(event.replyToken, {
+      type: "text",
+      text: "使い方",
+    });
+  }
+}
+
 
   // 「はい」または「いいえ」処理
   const state = await getUserState(userId);
@@ -303,3 +417,4 @@ async function getUserState(userId) {
 app.get("/", (req, res) => res.send("LINE Webhook server is running."));
 const PORT = process.env.PORT || 3000;
 app.listen(PORT, () => console.log(`✅ Server running on port ${PORT}`));
+
