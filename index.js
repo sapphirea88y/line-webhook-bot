@@ -467,91 +467,98 @@ async function clearTempData(userId) {
   }
 }
 
-// ===== 発注データを確定してスプレッドシートに移し、B/E/G列の関数もコピーして記録 & LINE返信 =====
+// ===== finalizeRecord: 入力中 → 発注記録へ転記（B/E/G列は毎回関数で自動生成） =====
 async function finalizeRecord(userId, replyToken) {
   const spreadsheetId = process.env.GOOGLE_SHEET_ID;
   const tempSheet = "入力中";
   const mainSheet = "発注記録";
-  const date = getJSTDateString(); // 例：2025/10/19（スプシに合わせて / 区切り）
-  const day = new Date(Date.now() + 9 * 60 * 60 * 1000).toLocaleDateString("ja-JP", { weekday: "short" });
+  const date = getJSTDateString();  // yyyy/mm/dd形式
 
   try {
-    // --- 入力中の（今日＋このユーザー）のデータ取得 ---
+    // --- 入力中データ取得（今日 & userId） ---
     const tempRes = await sheets.spreadsheets.values.get({
       spreadsheetId,
       range: `${tempSheet}!A:D`,
     });
     const tempRows = tempRes.data.values || [];
-    const todayRows = tempRows.filter(r => r[0] === userId && r[1] === date);
+    const todayRows = tempRows.filter((r) => r[0] === userId && r[1] === date);
 
     if (todayRows.length < 3) {
       await client.replyMessage(replyToken, {
         type: "text",
-        text: "3商品の入力が完了していません。",
+        text: "まだ3商品の入力が完了していません。",
       });
       return;
     }
 
-    // --- 発注記録の「直前の行」からB/E/G列の関数を取得しておく ---
+    // --- 発注記録に今ある行数を確認（次に書く行番号 = rowNumber） ---
     const mainRes = await sheets.spreadsheets.values.get({
       spreadsheetId,
       range: `${mainSheet}!A:G`,
     });
     const mainRows = mainRes.data.values || [];
-    let formulaB = "", formulaE = "", formulaG = "";
-    if (mainRows.length > 1) {
-      const last = mainRows[mainRows.length - 1];
-      formulaB = last[1] || ""; // 曜日列（関数が入ってる前提）
-      formulaE = last[4] || ""; // 発注数列（関数）
-      formulaG = last[6] || ""; // 納品予定列（関数など）
-    }
+    let rowNumber = mainRows.length + 1;
 
-    // --- 3商品のデータを発注記録に登録（数式あり） ---
-    for (const r of todayRows) {
-      const [uid, d, product, quantity] = r;
-      await sheets.spreadsheets.values.append({
+    // --- 全商品の記録を追加 ---
+    for (const [uid, aDate, product, qty] of todayRows) {
+      // B列（曜日）: I列を基準に曜日を出す仕様なら例として↓
+      const formulaB = `=IF(A${rowNumber}="","",TEXT(A${rowNumber},"ddd"))`;
+
+      // ☆E列（発注数）: 指定された長い式を rowNumber 対応に変換
+      const formulaE = `=IF(
+        $A${rowNumber} = "",
+        "",
+        IF(
+          INDEX('発注条件'!$C:$C, MATCH(1, ('発注条件'!$A:$A = $C${rowNumber}) * ('発注条件'!$B:$B = $B${rowNumber}), 0)) = "×",
+          "-",
+            INDEX('発注条件'!$D:$D, MATCH(1, ('発注条件'!$A:$A = $C${rowNumber}) * ('発注条件'!$B:$B = $G${rowNumber}), 0))
+          - $D${rowNumber}
+          + INDEX('発注条件'!$G:$G, MATCH(1, ('発注条件'!$A:$A = $C${rowNumber}) * ('発注条件'!$B:$B = $B${rowNumber}), 0))
+          - IF(
+              $C${rowNumber} = "キャベツ",
+                INDEX('発注条件'!$E:$E, MATCH(1, ('発注条件'!$A:$A = $C${rowNumber}) * ('発注条件'!$B:$B = $B${rowNumber}), 0) - 3)
+              + INDEX('発注条件'!$E:$E, MATCH(1, ('発注条件'!$A:$A = $C${rowNumber}) * ('発注条件'!$B:$B = $B${rowNumber}), 0) - 6),
+                INDEX('発注条件'!$E:$E, MATCH(1, ('発注条件'!$A:$A = $C${rowNumber}) * ('発注条件'!$B:$B = $B${rowNumber}), 0) - 3)
+            )
+        )
+      )`;
+
+      // G列（納品予定）: キャベツ=3日後、それ以外=2日後（曜日表記）
+      const formulaG = `=IF(F${rowNumber}="","",IF($C${rowNumber}="キャベツ",TEXT($A${rowNumber}+3,"ddd"),TEXT($A${rowNumber}+2,"ddd")))`;
+
+      // --- 行ごと書き込み（A/C/D/Fは値、B/E/Gは式） ---
+      await sheets.spreadsheets.values.update({
         spreadsheetId,
-        range: `${mainSheet}!A:G`,
+        range: `${mainSheet}!A${rowNumber}:G${rowNumber}`,
         valueInputOption: "USER_ENTERED",
         requestBody: {
-          values: [
-            [
-              d,          // A：日付
-              formulaB,   // B：曜日（関数コピー）
-              product,    // C：商品
-              quantity,   // D：残数（手入力）
-              formulaE,   // E：発注数（関数コピー）
-              uid,        // F：登録者
-              formulaG    // G：納品予定（関数コピー）
-            ]
-          ]
+          values: [[
+            aDate,     // A：日付
+            formulaB,  // B：曜日（関数）
+            product,   // C：商品名
+            qty,       // D：残数（数字）
+            formulaE,  // E：発注数（関数）
+            uid,       // F：登録者ID
+            formulaG   // G：納品予定（曜日として関数）
+          ]]
         }
       });
+
+      rowNumber++;
     }
 
-    // --- 登録した行を読み直してLINE返信用データ作成 ---
-    const checkRes = await sheets.spreadsheets.values.get({
-      spreadsheetId,
-      range: `${mainSheet}!A:G`,
-    });
-    const allRows = checkRes.data.values || [];
-    const todaysRecords = allRows.filter(r => r[0] === date && r[5] === userId);
-
-    const summary = todaysRecords.map(r => ({
-      product: r[2],          // C：商品
-      order: r[4] || "0"      // E：発注数（関数による自動計算済み）
-    }));
-
-    // --- 入力中シートを削除して状態戻す ---
+    // --- 入力中データ削除 & 状態を通常に戻す ---
     await clearTempData(userId);
     await setUserState(userId, "通常");
 
-    // --- LINEメッセージ整形して返信 ---
-    let message = "本日の発注登録が完了しました。\n";
-    message += summary.map(s => `${s.product}：${s.order}個`).join("\n");
-    await client.replyMessage(replyToken, { type: "text", text: message });
+    // --- LINE返信（簡易版） ---
+    await client.replyMessage(replyToken, {
+      type: "text",
+      text: "本日の発注データを登録しました。（発注数はスプレッドシートで自動計算されます）",
+    });
 
-    console.log("✅ finalizeRecord 完了:", summary);
+    console.log("✅ finalizeRecord 完了");
+
   } catch (err) {
     console.error("❌ finalizeRecord エラー:", err);
     await client.replyMessage(replyToken, {
@@ -562,10 +569,12 @@ async function finalizeRecord(userId, replyToken) {
 }
 
 
+
 // ===== サーバー起動 =====
 app.get("/", (req, res) => res.send("LINE Webhook server is running."));
 const PORT = process.env.PORT || 3000;
 app.listen(PORT, () => console.log(`✅ Server running on port ${PORT}`));
+
 
 
 
