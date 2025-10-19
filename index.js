@@ -359,11 +359,11 @@ async function updateRecord(product, userId) {
   console.log(`✅ ${product} の残数を ${newQty} に訂正`);
 }
 
-// 当日の入力が3商品そろっているか確認（発注記録を参照）
+// ✅ 発注記録シートに「今日分の3商品すべて」があり、かつ残数 or 発注数が空じゃない（または "-"）なら「入力済み」と判定
 async function isInputCompleteForToday(userId) {
   const spreadsheetId = process.env.GOOGLE_SHEET_ID;
   const sheet = "発注記録";
-  const date = getJSTDateString(); // ← これが "YYYY/MM/DD" になる
+  const date = getJSTDateString(); // "YYYY/MM/DD"
 
   const res = await sheets.spreadsheets.values.get({
     spreadsheetId,
@@ -371,12 +371,23 @@ async function isInputCompleteForToday(userId) {
   });
   const rows = res.data.values || [];
 
-  // 今日かつこのユーザーの行のみ抽出
-  const todayRows = rows.filter(r => r[0] === date && r[5] === userId);
+  // 今日 & このユーザーの行を取得
+  const todayRows = rows.filter((r) => r[0] === date && r[5] === userId);
 
-  // 3品（キャベツ/プリン/カレー）が全部あるか
-  const required = ["キャベツ", "プリン", "カレー"];
-  return required.every(p => todayRows.some(r => r[2] === p));
+  // 確認すべき商品
+  const items = ["キャベツ", "プリン", "カレー"];
+
+  // 各商品について「残数 or 発注数のどちらかが入力されている（または"-"）」ならOK
+  return items.every((item) => {
+    const row = todayRows.find((r) => r[2] === item);
+    if (!row) return false; // 商品そのものがない
+
+    const qty = row[3];     // D列：残数
+    const order = row[4];   // E列：発注数
+
+    // 発注不可日 "-" も「入力済み」と見なす
+    return (qty !== "" && qty !== undefined) || (order !== "" && order !== undefined);
+  });
 }
 
 // ===== 一時データ操作 =====
@@ -578,3 +589,4 @@ async function finalizeRecord(userId, replyToken) {
 app.get("/", (req, res) => res.send("LINE Webhook server is running."));
 const PORT = process.env.PORT || 3000;
 app.listen(PORT, () => console.log(`✅ Server running on port ${PORT}`));
+
