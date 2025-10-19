@@ -467,44 +467,44 @@ async function clearTempData(userId) {
   }
 }
 
-// ===== finalizeRecord: 入力中 → 発注記録へ転記（B/E/G列は毎回関数で自動生成） =====
+// ===== finalizeRecord: 発注記録に転記 + 発注数を返信 =====
 async function finalizeRecord(userId, replyToken) {
   const spreadsheetId = process.env.GOOGLE_SHEET_ID;
   const tempSheet = "入力中";
   const mainSheet = "発注記録";
-  const date = getJSTDateString();  // yyyy/mm/dd形式
+  const date = getJSTDateString();
 
   try {
-    // --- 入力中データ取得（今日 & userId） ---
+    // --- 入力中データ（今日+ユーザー）抽出 ---
     const tempRes = await sheets.spreadsheets.values.get({
       spreadsheetId,
       range: `${tempSheet}!A:D`,
     });
     const tempRows = tempRes.data.values || [];
-    const todayRows = tempRows.filter((r) => r[0] === userId && r[1] === date);
-
+    const todayRows = tempRows.filter(r => r[0] === userId && r[1] === date);
     if (todayRows.length < 3) {
       await client.replyMessage(replyToken, {
         type: "text",
-        text: "まだ3商品の入力が完了していません。",
+        text: "3商品の入力が完了していません。",
       });
       return;
     }
 
-    // --- 発注記録に今ある行数を確認（次に書く行番号 = rowNumber） ---
+    // --- 発注記録シートの次の行番号（rowNumber）取得 ---
     const mainRes = await sheets.spreadsheets.values.get({
       spreadsheetId,
       range: `${mainSheet}!A:G`,
     });
     const mainRows = mainRes.data.values || [];
     let rowNumber = mainRows.length + 1;
+    const startRow = rowNumber; // ← 後で読み返すときの開始位置に使う
 
-    // --- 全商品の記録を追加 ---
-    for (const [uid, aDate, product, qty] of todayRows) {
-      // B列（曜日）: I列を基準に曜日を出す仕様なら例として↓
+    // --- 1商品ずつA～G列を書き込む（B/E/Gは関数） ---
+    for (const [uid, d, product, qty] of todayRows) {
+      // B列（曜日）例: =TEXT(A9,"ddd")
       const formulaB = `=IF(A${rowNumber}="","",TEXT(A${rowNumber},"ddd"))`;
 
-      // ☆E列（発注数）: 指定された長い式を rowNumber 対応に変換
+      // E列（発注数）→ あなたが指定した式を rowNumber に対応させる
       const formulaE = `=IF(
         $A${rowNumber} = "",
         "",
@@ -523,41 +523,46 @@ async function finalizeRecord(userId, replyToken) {
         )
       )`;
 
-      // G列（納品予定）: キャベツ=3日後、それ以外=2日後（曜日表記）
+      // G列（納品予定・曜日表示）
       const formulaG = `=IF(F${rowNumber}="","",IF($C${rowNumber}="キャベツ",TEXT($A${rowNumber}+3,"ddd"),TEXT($A${rowNumber}+2,"ddd")))`;
 
-      // --- 行ごと書き込み（A/C/D/Fは値、B/E/Gは式） ---
       await sheets.spreadsheets.values.update({
         spreadsheetId,
         range: `${mainSheet}!A${rowNumber}:G${rowNumber}`,
         valueInputOption: "USER_ENTERED",
         requestBody: {
           values: [[
-            aDate,     // A：日付
-            formulaB,  // B：曜日（関数）
-            product,   // C：商品名
-            qty,       // D：残数（数字）
-            formulaE,  // E：発注数（関数）
-            uid,       // F：登録者ID
-            formulaG   // G：納品予定（曜日として関数）
+            d,        // A: 日付
+            formulaB, // B: 曜日（式）
+            product,  // C: 商品名
+            qty,      // D: 残数
+            formulaE, // E: 発注数（式）
+            uid,      // F: 登録者
+            formulaG  // G: 納品予定（式）
           ]]
         }
       });
-
       rowNumber++;
     }
 
-    // --- 入力中データ削除 & 状態を通常に戻す ---
+    // --- 計算結果を読み返してLINEに伝える ---
+    const endRow = rowNumber - 1; // 今書き終えた最後の行
+    const resultRes = await sheets.spreadsheets.values.get({
+      spreadsheetId,
+      range: `${mainSheet}!A${startRow}:G${endRow}`
+    });
+    const results = resultRes.data.values || [];
+    const summary = results.map(r => `${r[2]}：${r[4]}個`).join("\n");
+
+    // --- 入力中を消し、状態リセット ---
     await clearTempData(userId);
     await setUserState(userId, "通常");
 
-    // --- LINE返信（簡易版） ---
+    // --- LINE返信 ---
     await client.replyMessage(replyToken, {
       type: "text",
-      text: "本日の発注データを登録しました。（発注数はスプレッドシートで自動計算されます）",
+      text: `本日の発注内容を登録しました。\n\n${summary}`
     });
-
-    console.log("✅ finalizeRecord 完了");
 
   } catch (err) {
     console.error("❌ finalizeRecord エラー:", err);
@@ -569,18 +574,7 @@ async function finalizeRecord(userId, replyToken) {
 }
 
 
-
 // ===== サーバー起動 =====
 app.get("/", (req, res) => res.send("LINE Webhook server is running."));
 const PORT = process.env.PORT || 3000;
 app.listen(PORT, () => console.log(`✅ Server running on port ${PORT}`));
-
-
-
-
-
-
-
-
-
-
