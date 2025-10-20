@@ -45,6 +45,26 @@ async function handleMessage(event) {
   const text = event.message.text.trim();
   const state = await getUserState(userId);
 
+  // === 📌 JST時間を取得（YYYY-MM-DD HH:mm:ss） ===
+  const now = new Date();
+  const jst = new Date(now.getTime() + 9 * 60 * 60 * 1000);
+  const timestamp = jst.toISOString().replace('T', ' ').slice(0, 19);
+
+  // === ✅ ログシートへ記録 ===
+  try {
+    await sheets.spreadsheets.values.append({
+      spreadsheetId: process.env.GOOGLE_SHEET_ID,
+      range: `ログ!A:D`,
+      valueInputOption: "USER_ENTERED",
+      requestBody: {
+        values: [[userId, timestamp, state, text]]
+      }
+    });
+    console.log(`📝 Log saved: ${userId}, ${timestamp}, ${state}, ${text}`);
+  } catch (err) {
+    console.error("⚠ ログ記録エラー:", err);
+  }
+
   console.log(`🗣 ${userId} (${state}) → ${text}`);
 
   // === 共通キャンセル ===
@@ -121,25 +141,25 @@ async function handleMessage(event) {
   }
 
   // === 登録確認中 ===
-if (state === "登録確認中") {
-  if (text === "はい") {
-    await finalizeRecord(userId, event.replyToken); // 登録処理を呼ぶ
-    return;
-  }
-  if (text === "いいえ") {
-    await setUserState(userId, "通常");
+  if (state === "登録確認中") {
+    if (text === "はい") {
+      await finalizeRecord(userId, event.replyToken);
+      return;
+    }
+    if (text === "いいえ") {
+      await setUserState(userId, "通常");
+      await client.replyMessage(event.replyToken, {
+        type: "text",
+        text: "入力を中止しました。",
+      });
+      return;
+    }
     await client.replyMessage(event.replyToken, {
       type: "text",
-      text: "入力を中止しました。",
+      text: "「はい」または「いいえ」と送信してください。",
     });
     return;
   }
-  await client.replyMessage(event.replyToken, {
-    type: "text",
-    text: "「はい」または「いいえ」と送信してください。",
-  });
-  return;
-}
 
   // === 訂正確認中 ===
   if (state === "訂正確認中") {
@@ -147,7 +167,7 @@ if (state === "登録確認中") {
       await setUserState(userId, "訂正選択中");
       await client.replyMessage(event.replyToken, {
         type: "text",
-        text: "入力を訂正する材料を選んでください。（キャベツ／プリン／カレー）",
+        text: "訂正する材料を選んでください。（キャベツ／プリン／カレー）",
       });
       return;
     }
@@ -169,7 +189,7 @@ if (state === "登録確認中") {
   // === 訂正選択中 ===
   if (state === "訂正選択中") {
     if (["キャベツ", "プリン", "カレー"].includes(text)) {
-      await recordTempData(userId, text); // 訂正対象を一時記録
+      await recordTempData(userId, text);
       await setUserState(userId, "訂正入力中");
       await client.replyMessage(event.replyToken, {
         type: "text",
@@ -194,7 +214,7 @@ if (state === "登録確認中") {
       return;
     }
     const temp = await getTempData(userId);
-    await recordTempData(userId, temp, Number(text)); // 仮保存
+    await recordTempData(userId, temp, Number(text));
     await setUserState(userId, "訂正確認入力中");
     await client.replyMessage(event.replyToken, {
       type: "text",
@@ -592,6 +612,7 @@ async function finalizeRecord(userId, replyToken) {
 app.get("/", (req, res) => res.send("LINE Webhook server is running."));
 const PORT = process.env.PORT || 3000;
 app.listen(PORT, () => console.log(`✅ Server running on port ${PORT}`));
+
 
 
 
