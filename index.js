@@ -317,7 +317,7 @@ async [STATE.訂正確認入力中]({ text, userId, replyToken }) {
     text: "「はい」または「いいえ」と送信してください。",
   });
 },
-
+};  
 
 
 // --- 入力フロー（3商品の順番入力） ---
@@ -514,6 +514,7 @@ async function finalizeRecord(userId, replyToken) {
 app.get("/", (req, res) => res.send("LINE Webhook server is running."));
 const PORT = process.env.PORT || 3000;
 app.listen(PORT, () => console.log(`✅ Server running on port ${PORT}`));
+
 
 
 
