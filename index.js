@@ -182,9 +182,8 @@ if (state === "訂正確認中") {
     });
     return;
   }
+  return;
 }
-
-
   // === 訂正選択中 ===
   if (state === "訂正選択中") {
     if (["キャベツ", "プリン", "カレー"].includes(text)) {
@@ -638,5 +637,6 @@ async function deleteLastLogForUser(userId) {
 app.get("/", (req, res) => res.send("LINE Webhook server is running."));
 const PORT = process.env.PORT || 3000;
 app.listen(PORT, () => console.log(`✅ Server running on port ${PORT}`));
+
 
 
