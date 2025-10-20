@@ -437,64 +437,71 @@ async function clearTempData(userId) {
   }
 }
 
-// ===== finalizeRecord: 発注記録へ転記（B列/G列はA1形式でrow番号反映） =====
 async function finalizeRecord(userId, replyToken) {
   const date = getJSTDateString();
   try {
-    // ① 一時データの取得
     const tempRows = await getSheetValues("入力中!A:D");
     const todayRows = tempRows.filter(r => r[0] === userId && r[1] === date);
 
     if (todayRows.length < 3) {
-      return client.replyMessage(replyToken, {
-        type: "text",
-        text: "3商品の入力が完了していません。",
-      });
+      await client.replyMessage(replyToken, { type: "text", text: "3商品の入力が完了していません。" });
+      return;
     }
 
-    // ② 発注記録の現在の行数を取得 → 次に書き込む行番号を決定
     const mainRows = await getSheetValues("発注記録!A:G");
-    let rowNumber = mainRows.length + 1; // 1行ずつ更新する開始地点
+    let rowNumber = mainRows.length + 1;
 
-    // ③ 1レコードずつ書き込む
     for (const [uid, d, product, qty] of todayRows) {
       const formulaB = `=IF(A${rowNumber}="","",TEXT(A${rowNumber},"ddd"))`;
+      const formulaE = `=IF(
+        $A${rowNumber}="",
+        "",
+        IF(
+          INDEX('発注条件'!$C:$C,
+            MATCH(1,('発注条件'!$A:$A=$C${rowNumber})*('発注条件'!$B:$B=$B${rowNumber}),0)
+          )="×",
+          "0",
+          MAX(
+            0,
+            INDEX('発注条件'!$D:$D,
+              MATCH(1,('発注条件'!$A:$A=$C${rowNumber})*('発注条件'!$B:$B=$G${rowNumber}),0)
+            )
+            - $D${rowNumber}
+            + INDEX('発注条件'!$G:$G,
+              MATCH(1,('発注条件'!$A:$A=$C${rowNumber})*('発注条件'!$B:$B=$B${rowNumber}),0)
+            )
+            - IF(
+                $C${rowNumber}="キャベツ",
+                INDEX($E:$E,ROW()-3)+INDEX($E:$E,ROW()-6),
+                INDEX($E:$E,ROW()-3)
+              )
+          )
+        )
+      )`;
       const formulaG = `=IF(F${rowNumber}="","",IF($C${rowNumber}="キャベツ",TEXT($A${rowNumber}+3,"ddd"),TEXT($A${rowNumber}+2,"ddd")))`;
 
-      // 必要ならここにE列（発注数）の数式も入れられる（今は空欄または元の式でOK）
       const rowData = [
-        d,          // A列: 日付
-        formulaB,   // B列: 曜日
-        product,    // C列: 商品名
-        qty,        // D列: 残数
-        "",         // E列: 発注数（必要なら式を追加してもOK）
-        uid,        // F列: ユーザーID
-        formulaG    // G列: 納品予定曜日
+        d,          // A
+        formulaB,   // B
+        product,    // C
+        qty,        // D
+        formulaE,   // E
+        uid,        // F
+        formulaG    // G
       ];
 
       await updateSheetValues(`発注記録!A${rowNumber}:G${rowNumber}`, [rowData]);
       rowNumber++;
     }
 
-    // ④ 終了処理
-    const summary = todayRows
-      .map(([uid, d, product, qty]) => `${product}：${qty}個`)
-      .join("\n");
-
+    const summary = todayRows.map(([, , product, qty]) => `${product}：${qty}個`).join("\n");
     await clearTempData(userId);
     await setUserState(userId, STATE.通常);
-
-    await client.replyMessage(replyToken, {
-      type: "text",
-      text: `本日の発注内容を登録しました。\n\n${summary}`,
-    });
+    await client.replyMessage(replyToken, { type: "text", text: `本日の発注内容を登録しました。\n\n${summary}` });
 
   } catch (err) {
     console.error("❌ finalizeRecord エラー:", err);
-    await client.replyMessage(replyToken, {
-      type: "text",
-      text: "登録中にエラーが発生しました。",
-    });
+    await client.replyMessage(replyToken, { type: "text", text: "登録中にエラーが発生しました。" });
   }
 }
 
@@ -502,6 +509,7 @@ async function finalizeRecord(userId, replyToken) {
 app.get("/", (req, res) => res.send("LINE Webhook server is running."));
 const PORT = process.env.PORT || 3000;
 app.listen(PORT, () => console.log(`✅ Server running on port ${PORT}`));
+
 
 
 
