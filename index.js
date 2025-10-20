@@ -141,50 +141,54 @@ async function handleMessage(event) {
   }
 
   // === 登録確認中 ===
-  if (state === "登録確認中") {
-    if (text === "はい") {
-      await finalizeRecord(userId, event.replyToken);
-      return;
-    }
-    if (text === "いいえ") {
-      await setUserState(userId, "通常");
-      await client.replyMessage(event.replyToken, {
-        type: "text",
-        text: "入力を中止しました。",
-      });
-      return;
-    }
+if (state === "登録確認中") {
+  if (text === "はい") {
+    await deleteLastLogForUser(userId); // ✅ ここでログ削除
+    await finalizeRecord(userId, event.replyToken);
+    return;
+  }
+  if (text === "いいえ") {
+    await deleteLastLogForUser(userId); // ✅ ここも同じく削除
+    await setUserState(userId, "通常");
     await client.replyMessage(event.replyToken, {
       type: "text",
-      text: "「はい」または「いいえ」と送信してください。",
+      text: "入力を中止しました。",
+    });
+    return;
+  }
+  await client.replyMessage(event.replyToken, {
+    type: "text",
+    text: "「はい」または「いいえ」と送信してください。",
+  });
+  return;
+}
+
+  // === 訂正確認入力中 ===
+if (state === "訂正確認入力中") {
+  const temp = await getTempData(userId);
+
+  if (text === "はい") {
+    await deleteLastLogForUser(userId); // ✅ 削除
+    await updateRecord(temp, userId);
+    await setUserState(userId, "通常");
+    await client.replyMessage(event.replyToken, {
+      type: "text",
+      text: `${temp}の残数を訂正しました。`,
     });
     return;
   }
 
-  // === 訂正確認中 ===
-  if (state === "訂正確認中") {
-    if (text === "はい") {
-      await setUserState(userId, "訂正選択中");
-      await client.replyMessage(event.replyToken, {
-        type: "text",
-        text: "訂正する材料を選んでください。（キャベツ／プリン／カレー）",
-      });
-      return;
-    }
-    if (text === "いいえ") {
-      await setUserState(userId, "通常");
-      await client.replyMessage(event.replyToken, {
-        type: "text",
-        text: "訂正を中止しました。",
-      });
-      return;
-    }
+  if (text === "いいえ") {
+    await deleteLastLogForUser(userId); // ✅ 削除
+    await setUserState(userId, "訂正選択中");
     await client.replyMessage(event.replyToken, {
       type: "text",
-      text: "「はい」または「いいえ」と送信してください。",
+      text: "訂正をやり直します。訂正する材料を選んでください。（キャベツ／プリン／カレー）",
     });
     return;
   }
+}
+
 
   // === 訂正選択中 ===
   if (state === "訂正選択中") {
@@ -607,11 +611,39 @@ async function finalizeRecord(userId, replyToken) {
   }
 }
 
+// ===== ログシートの最後の1件（このユーザー）を削除 =====
+async function deleteLastLogForUser(userId) {
+  const spreadsheetId = process.env.GOOGLE_SHEET_ID;
+  const sheet = "ログ";
+
+  const res = await sheets.spreadsheets.values.get({
+    spreadsheetId,
+    range: `${sheet}!A:D`,
+  });
+  const rows = res.data.values || [];
+
+  // 後ろから該当ユーザーを探す
+  const idx = [...rows].reverse().findIndex(r => r[0] === userId);
+  if (idx === -1) return; // 見つからなければ何もしない
+
+  // 実際の行番号（1開始）
+  const actualIndex = rows.length - idx;
+
+  // その行を空文字で上書き（削除の代替）
+  await sheets.spreadsheets.values.update({
+    spreadsheetId,
+    range: `${sheet}!A${actualIndex}:D${actualIndex}`,
+    valueInputOption: "USER_ENTERED",
+    requestBody: { values: [["", "", "", ""]] }
+  });
+}
+
 
 // ===== サーバー起動 =====
 app.get("/", (req, res) => res.send("LINE Webhook server is running."));
 const PORT = process.env.PORT || 3000;
 app.listen(PORT, () => console.log(`✅ Server running on port ${PORT}`));
+
 
 
 
