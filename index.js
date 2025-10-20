@@ -140,15 +140,15 @@ async function handleMessage(event) {
     return;
   }
 
-  // === 登録確認中 ===
+// === 登録確認中 ===
 if (state === "登録確認中") {
   if (text === "はい") {
-    await deleteLastTemporaryLog(userId); // ✅ 数字入力で発生した一時ログを削除
+    await clearTempData(userId); // ✅ ← 入力中シート消す
     await finalizeRecord(userId, event.replyToken);
     return;
   }
   if (text === "いいえ") {
-    await deleteLastTemporaryLog(userId);
+    await clearTempData(userId); // ✅ ← ここでも消す
     await setUserState(userId, "通常");
     await client.replyMessage(event.replyToken, {
       type: "text",
@@ -156,15 +156,19 @@ if (state === "登録確認中") {
     });
     return;
   }
+  await client.replyMessage(event.replyToken, {
+    type: "text",
+    text: "「はい」または「いいえ」と送信してください。",
+  });
+  return;
 }
 
-
-  // === 訂正確認入力中 ===
+// === 訂正確認入力中 ===
 if (state === "訂正確認入力中") {
   const temp = await getTempData(userId);
 
   if (text === "はい") {
-    await deleteLastTemporaryLog(userId);
+    await clearTempData(userId); // ✅ ← 入力中シートの仮データ削除
     await updateRecord(temp, userId);
     await setUserState(userId, "通常");
     await client.replyMessage(event.replyToken, {
@@ -175,30 +179,7 @@ if (state === "訂正確認入力中") {
   }
 
   if (text === "いいえ") {
-    await deleteLastTemporaryLog(userId);
-    await setUserState(userId, "訂正選択中");
-    await client.replyMessage(event.replyToken, {
-      type: "text",
-      text: "訂正をやり直します。訂正する材料を選んでください。（キャベツ／プリン／カレー）",
-    });
-    return;
-  }
-}
-
-  if (text === "いいえ") {
-    await deleteLastTemporaryLog(userId);
-    await setUserState(userId, "訂正選択中");
-    await client.replyMessage(event.replyToken, {
-      type: "text",
-      text: "訂正をやり直します。訂正する材料を選んでください。（キャベツ／プリン／カレー）",
-    });
-    return;
-  }
-}
-
-
-  if (text === "いいえ") {
-    await deleteLastLogForUser(userId); // ✅ 削除
+    await clearTempData(userId); // ✅ ← いいえでも消す
     await setUserState(userId, "訂正選択中");
     await client.replyMessage(event.replyToken, {
       type: "text",
@@ -630,8 +611,8 @@ async function finalizeRecord(userId, replyToken) {
   }
 }
 
-//  ログシートの「最後の1件」かつ「入力中 または 訂正入力中」の場合だけ削除
-async function deleteLastTemporaryLog(userId) {
+// ===== ログシートの最後の1件（このユーザー）を削除 =====
+async function deleteLastLogForUser(userId) {
   const spreadsheetId = process.env.GOOGLE_SHEET_ID;
   const sheet = "ログ";
 
@@ -641,15 +622,14 @@ async function deleteLastTemporaryLog(userId) {
   });
   const rows = res.data.values || [];
 
-  // 後ろから見て「このユーザー」「かつステータスが入力中 or 訂正入力中」の行を探す
-  const idx = [...rows].reverse().findIndex(r => 
-    r[0] === userId && (r[2] === "入力中" || r[2] === "訂正入力中")
-  );
-  if (idx === -1) return; // 条件に合うものがなければ何もしない
+  // 後ろから該当ユーザーを探す
+  const idx = [...rows].reverse().findIndex(r => r[0] === userId);
+  if (idx === -1) return; // 見つからなければ何もしない
 
+  // 実際の行番号（1開始）
   const actualIndex = rows.length - idx;
 
-  // その行だけ空白で上書き（削除の代替）
+  // その行を空文字で上書き（削除の代替）
   await sheets.spreadsheets.values.update({
     spreadsheetId,
     range: `${sheet}!A${actualIndex}:D${actualIndex}`,
@@ -659,11 +639,11 @@ async function deleteLastTemporaryLog(userId) {
 }
 
 
-
 // ===== サーバー起動 =====
 app.get("/", (req, res) => res.send("LINE Webhook server is running."));
 const PORT = process.env.PORT || 3000;
 app.listen(PORT, () => console.log(`✅ Server running on port ${PORT}`));
+
 
 
 
