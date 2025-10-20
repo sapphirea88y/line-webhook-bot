@@ -164,7 +164,7 @@ if (state === "登録確認中") {
   return;
 }
 
-  // === 訂正確認中 ===
+ // === 訂正確認中 ===
 if (state === "訂正確認中") {
   if (text === "はい") {
     await setUserState(userId, "訂正選択中");
@@ -182,8 +182,8 @@ if (state === "訂正確認中") {
     });
     return;
   }
-  return;
 }
+
   // === 訂正選択中 ===
   if (state === "訂正選択中") {
     if (["キャベツ", "プリン", "カレー"].includes(text)) {
@@ -605,38 +605,7 @@ async function finalizeRecord(userId, replyToken) {
   }
 }
 
-// ===== ログシートの最後の1件（このユーザー）を削除 =====
-async function deleteLastLogForUser(userId) {
-  const spreadsheetId = process.env.GOOGLE_SHEET_ID;
-  const sheet = "ログ";
-
-  const res = await sheets.spreadsheets.values.get({
-    spreadsheetId,
-    range: `${sheet}!A:D`,
-  });
-  const rows = res.data.values || [];
-
-  // 後ろから該当ユーザーを探す
-  const idx = [...rows].reverse().findIndex(r => r[0] === userId);
-  if (idx === -1) return; // 見つからなければ何もしない
-
-  // 実際の行番号（1開始）
-  const actualIndex = rows.length - idx;
-
-  // その行を空文字で上書き（削除の代替）
-  await sheets.spreadsheets.values.update({
-    spreadsheetId,
-    range: `${sheet}!A${actualIndex}:D${actualIndex}`,
-    valueInputOption: "USER_ENTERED",
-    requestBody: { values: [["", "", "", ""]] }
-  });
-}
-
-
 // ===== サーバー起動 =====
 app.get("/", (req, res) => res.send("LINE Webhook server is running."));
 const PORT = process.env.PORT || 3000;
 app.listen(PORT, () => console.log(`✅ Server running on port ${PORT}`));
-
-
-
