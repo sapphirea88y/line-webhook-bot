@@ -381,19 +381,21 @@ async function updateRecord(product, userId) {
 
 // --- 今日の3商品がすべて入力済みか判定 ---
 async function isInputCompleteForToday(userId) {
-  const date = getJSTDateString();
+  const date = getJSTDateString(); // "2025/10/20"
   const rows = await getSheetValues("発注記録!A:F");
-  const todayRows = rows.filter(r => r[0] === date && r[5] === userId);
+
+  const todayRows = rows.filter(r => {
+    const sheetDate = typeof r[0] === 'string'
+      ? r[0]
+      : new Date(r[0]).toISOString().slice(0, 10).replace(/-/g, '/'); // "YYYY/MM/DD" に統一
+
+    return sheetDate === date && r[5] === userId;
+  });
 
   const items = ["キャベツ", "プリン", "カレー"];
-  return items.every(item => {
-    const row = todayRows.find(r => r[2] === item);
-    if (!row) return false;
-    const qty = row[3];
-    const order = row[4];
-    return (qty !== "" && qty !== undefined) || (order !== "" && order !== undefined);
-  });
+  return items.every(item => todayRows.some(r => r[2] === item));
 }
+
 
 // ===== 一時データ操作 =====
 async function recordTempData(userId, product, quantity) {
@@ -509,6 +511,7 @@ async function finalizeRecord(userId, replyToken) {
 app.get("/", (req, res) => res.send("LINE Webhook server is running."));
 const PORT = process.env.PORT || 3000;
 app.listen(PORT, () => console.log(`✅ Server running on port ${PORT}`));
+
 
 
 
