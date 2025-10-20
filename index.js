@@ -452,7 +452,7 @@ async function finalizeRecord(userId, replyToken) {
 
     const rowsToAppend = todayRows.map(([uid, d, product, qty]) => [
       d,
-      `=IF(A2="","",TEXT(A2,"ddd"))`,
+      `TEXT(A${rowNumber},"ddd")`,
       product,
       qty,
       `=IF(
@@ -481,7 +481,7 @@ async function finalizeRecord(userId, replyToken) {
         )
       )`,
       uid,
-      `=IF(F2="","",IF(C2="キャベツ",TEXT(A2+3,"ddd"),TEXT(A2+2,"ddd")))`
+      `=IF(F${rowNumber}="","",IF(C${rowNumber}="キャベツ",TEXT(A${rowNumber}+3,"ddd"),TEXT(A${rowNumber}+2,"ddd")))`
     ]);
 
     await SHEETS.spreadsheets.values.append({
@@ -519,6 +519,7 @@ async function finalizeRecord(userId, replyToken) {
 app.get("/", (req, res) => res.send("LINE Webhook server is running."));
 const PORT = process.env.PORT || 3000;
 app.listen(PORT, () => console.log(`✅ Server running on port ${PORT}`));
+
 
 
 
