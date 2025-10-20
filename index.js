@@ -164,22 +164,6 @@ if (state === "登録確認中") {
   return;
 }
 
-
-// === 訂正確認入力中 ===
-if (state === "訂正確認入力中") {
-  const temp = await getTempData(userId);
-
-  if (text === "はい") {
-    await clearTempData(userId); // ✅ ← 入力中シートの仮データ削除
-    await updateRecord(temp, userId);
-    await setUserState(userId, "通常");
-    await client.replyMessage(event.replyToken, {
-      type: "text",
-      text: `${temp}の残数を訂正しました。`,
-    });
-    return;
-  }
-
   if (text === "いいえ") {
     await clearTempData(userId); // ✅ ← いいえでも消す
     await setUserState(userId, "訂正選択中");
@@ -645,3 +629,4 @@ async function deleteLastLogForUser(userId) {
 app.get("/", (req, res) => res.send("LINE Webhook server is running."));
 const PORT = process.env.PORT || 3000;
 app.listen(PORT, () => console.log(`✅ Server running on port ${PORT}`));
+
