@@ -143,12 +143,13 @@ async function handleMessage(event) {
 // === 登録確認中 ===
 if (state === "登録確認中") {
   if (text === "はい") {
-    await clearTempData(userId); // ✅ ← 入力中シート消す
+    // ✅ 入力内容を発注記録へ転記（中で clearTempData も実行される）
     await finalizeRecord(userId, event.replyToken);
     return;
   }
   if (text === "いいえ") {
-    await clearTempData(userId); // ✅ ← ここでも消す
+    // ✅ 入力をキャンセル → 入力中シートをここで消す
+    await clearTempData(userId);
     await setUserState(userId, "通常");
     await client.replyMessage(event.replyToken, {
       type: "text",
@@ -162,6 +163,7 @@ if (state === "登録確認中") {
   });
   return;
 }
+
 
 // === 訂正確認入力中 ===
 if (state === "訂正確認入力中") {
@@ -643,11 +645,3 @@ async function deleteLastLogForUser(userId) {
 app.get("/", (req, res) => res.send("LINE Webhook server is running."));
 const PORT = process.env.PORT || 3000;
 app.listen(PORT, () => console.log(`✅ Server running on port ${PORT}`));
-
-
-
-
-
-
-
-
