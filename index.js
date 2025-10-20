@@ -437,7 +437,6 @@ async function clearTempData(userId) {
   }
 }
 
-// ===== finalizeRecord: 発注記録へ転記（曜日だけA1形式に修正済み） =====
 async function finalizeRecord(userId, replyToken) {
   const date = getJSTDateString();
   try {
@@ -451,26 +450,38 @@ async function finalizeRecord(userId, replyToken) {
       });
     }
 
-    // ② append用データ（曜日だけA1形式に変更）
     const rowsToAppend = todayRows.map(([uid, d, product, qty]) => [
-      // A列：日付
       d,
-
-      // ✅ B列：曜日（A1形式：A2が自動で行対応される）
       `=IF(A2="","",TEXT(A2,"ddd"))`,
-
-      // C列：商品
       product,
-
-      // D列：残数
       qty,
-
-      // 👇 E列以降はまだ変更していない → そのまま元の式を使うならここに戻す
-      "", // 必要ならE列の式を入れる（今は省略で安全）
-      uid, // F列: ユーザーID
-
-      // G列（納品予定曜日）も必要なら後で修正可
-      ""
+      `=IF(
+        A2="",
+        "",
+        IF(
+          INDEX('発注条件'!$C:$C,
+            MATCH(1,('発注条件'!$A:$A=C2)*('発注条件'!$B:$B=B2),0)
+          )="×",
+          "0",
+          MAX(
+            0,
+            INDEX('発注条件'!$D:$D,
+              MATCH(1,('発注条件'!$A:$A=C2)*('発注条件'!$B:$B=G2),0)
+            )
+            - D2
+            + INDEX('発注条件'!$G:$G,
+              MATCH(1,('発注条件'!$A:$A=C2)*('発注条件'!$B:$B=B2),0)
+            )
+            - IF(
+                C2="キャベツ",
+                INDEX($E:$E,ROW()-3)+INDEX($E:$E,ROW()-6),
+                INDEX($E:$E,ROW()-3)
+              )
+          )
+        )
+      )`,
+      uid,
+      `=IF(F2="","",IF(C2="キャベツ",TEXT(A2+3,"ddd"),TEXT(A2+2,"ddd")))`
     ]);
 
     await SHEETS.spreadsheets.values.append({
@@ -503,9 +514,11 @@ async function finalizeRecord(userId, replyToken) {
 }
 
 
+
 // ===== サーバー起動 =====
 app.get("/", (req, res) => res.send("LINE Webhook server is running."));
 const PORT = process.env.PORT || 3000;
 app.listen(PORT, () => console.log(`✅ Server running on port ${PORT}`));
+
 
 
