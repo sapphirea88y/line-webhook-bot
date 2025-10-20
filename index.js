@@ -288,33 +288,36 @@ const stateHandlers = {
     });
   },
 
-  // --- 訂正確認入力中（確定 or やり直し） ---
-  async [STATE.訂正確認入力中]({ text, userId, replyToken }) {
-    const product = await getTempData(userId);
+// --- 訂正確認入力中（確定 or やり直し） ---
+async [STATE.訂正確認入力中]({ text, userId, replyToken }) {
+  const product = await getTempData(userId);
 
-    if (text === "はい") {
-      await updateRecord(product, userId);
-      await setUserState(userId, STATE.通常);
-      return client.replyMessage(replyToken, {
-        type: "text",
-        text: `${product}の残数を訂正しました。`,
-      });
-    }
-
-    if (text === "いいえ") {
-      await setUserState(userId, STATE.訂正選択中);
-      return client.replyMessage(replyToken, {
-        type: "text",
-        text: "訂正をやり直します。訂正する材料を選んでください。（キャベツ／プリン／カレー）",
-      });
-    }
-
+  if (text === "はい") {
+    await updateRecord(product, userId);     // 発注記録の更新
+    await clearTempData(userId);             // ← ★ 入力中シートから削除（ここを追加）
+    await setUserState(userId, STATE.通常);  // 状態リセット
     return client.replyMessage(replyToken, {
       type: "text",
-      text: "「はい」または「いいえ」と送信してください。",
+      text: `${product}の残数を訂正しました。`,
     });
-  },
-};
+  }
+
+  if (text === "いいえ") {
+    // ※この場合はまだ続けるため、入力中シートは消さない
+    await setUserState(userId, STATE.訂正選択中);
+    return client.replyMessage(replyToken, {
+      type: "text",
+      text: "訂正をやり直します。訂正する材料を選んでください。（キャベツ／プリン／カレー）",
+    });
+  }
+
+  // ✅ その他（不正な入力）
+  return client.replyMessage(replyToken, {
+    type: "text",
+    text: "「はい」または「いいえ」と送信してください。",
+  });
+},
+
 
 
 // --- 入力フロー（3商品の順番入力） ---
@@ -511,6 +514,7 @@ async function finalizeRecord(userId, replyToken) {
 app.get("/", (req, res) => res.send("LINE Webhook server is running."));
 const PORT = process.env.PORT || 3000;
 app.listen(PORT, () => console.log(`✅ Server running on port ${PORT}`));
+
 
 
 
