@@ -521,18 +521,20 @@ async function finalizeRecord(userId, replyToken) {
         "",
         IF(
           INDEX('発注条件'!$C:$C, MATCH(1, ('発注条件'!$A:$A = $C${rowNumber}) * ('発注条件'!$B:$B = $B${rowNumber}), 0)) = "×",
-          "-",
+          "0",
+            MAX(
+            0,
             INDEX('発注条件'!$D:$D, MATCH(1, ('発注条件'!$A:$A = $C${rowNumber}) * ('発注条件'!$B:$B = $G${rowNumber}), 0))
-          - $D${rowNumber}
-          + INDEX('発注条件'!$G:$G, MATCH(1, ('発注条件'!$A:$A = $C${rowNumber}) * ('発注条件'!$B:$B = $B${rowNumber}), 0))
-          - IF(
-              $C${rowNumber} = "キャベツ",
+            - $D${rowNumber}
+            + INDEX('発注条件'!$G:$G, MATCH(1, ('発注条件'!$A:$A = $C${rowNumber}) * ('発注条件'!$B:$B = $B${rowNumber}), 0))
+            - IF(
+                $C${rowNumber} = "キャベツ",
                 INDEX($E:$E, ROW()-3)
               + INDEX($E:$E, ROW()-6),
                 INDEX($E:$E, ROW()-3)
+              )
             )
-        )
-      )`;
+        )`;
 
       // G列（納品予定・曜日表示）
       const formulaG = `=IF(F${rowNumber}="","",IF($C${rowNumber}="キャベツ",TEXT($A${rowNumber}+3,"ddd"),TEXT($A${rowNumber}+2,"ddd")))`;
@@ -589,5 +591,6 @@ async function finalizeRecord(userId, replyToken) {
 app.get("/", (req, res) => res.send("LINE Webhook server is running."));
 const PORT = process.env.PORT || 3000;
 app.listen(PORT, () => console.log(`✅ Server running on port ${PORT}`));
+
 
 
