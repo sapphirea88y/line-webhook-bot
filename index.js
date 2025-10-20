@@ -164,12 +164,21 @@ if (state === "登録確認中") {
   return;
 }
 
-  if (text === "いいえ") {
-    await clearTempData(userId); // ✅ ← いいえでも消す
+  // === 訂正確認中 ===
+if (state === "訂正確認中") {
+  if (text === "はい") {
     await setUserState(userId, "訂正選択中");
     await client.replyMessage(event.replyToken, {
       type: "text",
-      text: "訂正をやり直します。訂正する材料を選んでください。（キャベツ／プリン／カレー）",
+      text: "訂正する材料を選んでください。（キャベツ／プリン／カレー）",
+    });
+    return;
+  }
+  if (text === "いいえ") {
+    await setUserState(userId, "通常");
+    await client.replyMessage(event.replyToken, {
+      type: "text",
+      text: "訂正を中止しました。",
     });
     return;
   }
@@ -629,4 +638,5 @@ async function deleteLastLogForUser(userId) {
 app.get("/", (req, res) => res.send("LINE Webhook server is running."));
 const PORT = process.env.PORT || 3000;
 app.listen(PORT, () => console.log(`✅ Server running on port ${PORT}`));
+
 
