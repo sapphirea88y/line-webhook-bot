@@ -527,9 +527,9 @@ async function finalizeRecord(userId, replyToken) {
           + INDEX('発注条件'!$G:$G, MATCH(1, ('発注条件'!$A:$A = $C${rowNumber}) * ('発注条件'!$B:$B = $B${rowNumber}), 0))
           - IF(
               $C${rowNumber} = "キャベツ",
-                INDEX('発注条件'!$E:$E, MATCH(1, ('発注条件'!$A:$A = $C${rowNumber}) * ('発注条件'!$B:$B = $B${rowNumber}), 0) - 3)
-              + INDEX('発注条件'!$E:$E, MATCH(1, ('発注条件'!$A:$A = $C${rowNumber}) * ('発注条件'!$B:$B = $B${rowNumber}), 0) - 6),
-                INDEX('発注条件'!$E:$E, MATCH(1, ('発注条件'!$A:$A = $C${rowNumber}) * ('発注条件'!$B:$B = $B${rowNumber}), 0) - 3)
+                INDEX($E:$E, ROW()-3)
+              + INDEX($E:$E, ROW()-6),
+                INDEX($E:$E, ROW()-3)
             )
         )
       )`;
@@ -589,4 +589,5 @@ async function finalizeRecord(userId, replyToken) {
 app.get("/", (req, res) => res.send("LINE Webhook server is running."));
 const PORT = process.env.PORT || 3000;
 app.listen(PORT, () => console.log(`✅ Server running on port ${PORT}`));
+
 
