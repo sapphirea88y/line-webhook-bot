@@ -534,7 +534,8 @@ async function finalizeRecord(userId, replyToken) {
                 INDEX($E:$E, ROW()-3)
               )
             )
-        )`;
+          )
+      )`;
 
       // G列（納品予定・曜日表示）
       const formulaG = `=IF(F${rowNumber}="","",IF($C${rowNumber}="キャベツ",TEXT($A${rowNumber}+3,"ddd"),TEXT($A${rowNumber}+2,"ddd")))`;
@@ -591,6 +592,7 @@ async function finalizeRecord(userId, replyToken) {
 app.get("/", (req, res) => res.send("LINE Webhook server is running."));
 const PORT = process.env.PORT || 3000;
 app.listen(PORT, () => console.log(`✅ Server running on port ${PORT}`));
+
 
 
 
