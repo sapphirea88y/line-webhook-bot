@@ -421,18 +421,18 @@ async function handleConfirmRequest(userId, replyToken) {
     return;
   }
 
-  const inputList = ["キャベツ", "プリン", "カレー"]
+  const inputList = ["キャベツ", "プリン　", "カレー　"]
     .map(item => {
-      const row = targetRows.find(r => r[2] === item);
-      const qty = row ? row[3] || 0 : 0;
+      const row = targetRows.find(r => r[2] === item.trim());
+      const qty = row ? r[3] || 0 : 0;
       return `${item}：${qty}`;
     })
     .join("\n");
 
-  const orderList = ["キャベツ", "プリン", "カレー"]
+  const orderList = ["キャベツ", "プリン　", "カレー　"]
     .map(item => {
-      const row = targetRows.find(r => r[2] === item);
-      const qty = row ? row[4] || 0 : 0;
+      const row = targetRows.find(r => r[2] === item.trim());
+      const qty = row ? r[4] || 0 : 0;
       return `${item}：${qty}`;
     })
     .join("\n");
@@ -559,6 +559,7 @@ async function finalizeRecord(userId, replyToken) {
 app.get("/", (req, res) => res.send("LINE Webhook server is running."));
 const PORT = process.env.PORT || 3000;
 app.listen(PORT, () => console.log(`✅ Server running on port ${PORT}`));
+
 
 
 
