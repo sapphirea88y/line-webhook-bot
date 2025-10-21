@@ -170,12 +170,8 @@ const stateHandlers = {
   async [STATE.通常]({ text, userId, replyToken }) {
     if (text === "入力") return handleInputStart(userId, replyToken);
     if (text === "訂正") return handleCorrectionStart(userId, replyToken);
-    if (text === "確認") {
-      return client.replyMessage(replyToken, {
-        type: "text",
-        text: "（確認機能は準備中です）",
-      });
-    }
+    if (text === "確認") return handleConfirmRequest(userId, replyToken);
+
     return client.replyMessage(replyToken, {
       type: "text",
       text: "「入力」「訂正」「確認」のいずれかを送信してください。",
@@ -399,6 +395,55 @@ async function isInputCompleteForToday(userId) {
   return items.every(item => todayRows.some(r => r[2] === item));
 }
 
+// ===== 対象日取得（午前11時前は前日） =====
+function getTargetDateString() {
+  const now = getJSTDate();
+  if (now.getHours() < 11) {
+    now.setDate(now.getDate() - 1);
+  }
+  const y = now.getFullYear();
+  const m = String(now.getMonth() + 1).padStart(2, '0');
+  const d = String(now.getDate()).padStart(2, '0');
+  return `${y}/${m}/${d}`;
+}
+
+// ===== 確認機能 =====
+async function handleConfirmRequest(userId, replyToken) {
+  const date = getTargetDateString();
+  const rows = await getSheetValues("発注記録!A:F");
+  const targetRows = rows.filter(r => r[0] === date && r[5] === userId);
+
+  if (targetRows.length === 0) {
+    await client.replyMessage(replyToken, {
+      type: "text",
+      text: `${date}の記録は見つかりませんでした。`,
+    });
+    return;
+  }
+
+  const inputList = ["キャベツ", "プリン", "カレー"]
+    .map(item => {
+      const row = targetRows.find(r => r[2] === item);
+      const qty = row ? row[3] || 0 : 0;
+      return `${item}：${qty}`;
+    })
+    .join("\n");
+
+  const orderList = ["キャベツ", "プリン", "カレー"]
+    .map(item => {
+      const row = targetRows.find(r => r[2] === item);
+      const qty = row ? row[4] || 0 : 0;
+      return `${item}：${qty}`;
+    })
+    .join("\n");
+
+  const message = `${date}\n===入力数===\n${inputList}\n===発注数===\n${orderList}\n===========`;
+
+  await client.replyMessage(replyToken, {
+    type: "text",
+    text: message,
+  });
+}
 
 // ===== 一時データ操作 =====
 async function recordTempData(userId, product, quantity) {
@@ -514,6 +559,7 @@ async function finalizeRecord(userId, replyToken) {
 app.get("/", (req, res) => res.send("LINE Webhook server is running."));
 const PORT = process.env.PORT || 3000;
 app.listen(PORT, () => console.log(`✅ Server running on port ${PORT}`));
+
 
 
 
