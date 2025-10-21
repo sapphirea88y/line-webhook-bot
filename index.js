@@ -422,20 +422,21 @@ async function handleConfirmRequest(userId, replyToken) {
   }
 
   const inputList = ["キャベツ", "プリン　", "カレー　"]
-    .map(item => {
-      const row = targetRows.find(r => r[2] === item.trim());
-      const qty = row ? r[3] || 0 : 0;
-      return `${item}：${qty}`;
-    })
-    .join("\n");
+  .map(item => {
+    const row = targetRows.find(r => r[2] === item.trim());
+    const qty = row ? row[3] || 0 : 0;  // ← r → row に修正
+    return `${item}：${qty}`;
+  })
+  .join("\n");
 
-  const orderList = ["キャベツ", "プリン　", "カレー　"]
-    .map(item => {
-      const row = targetRows.find(r => r[2] === item.trim());
-      const qty = row ? r[4] || 0 : 0;
-      return `${item}：${qty}`;
-    })
-    .join("\n");
+const orderList = ["キャベツ", "プリン　", "カレー　"]
+  .map(item => {
+    const row = targetRows.find(r => r[2] === item.trim());
+    const qty = row ? row[4] || 0 : 0;  // ← 同じく修正
+    return `${item}：${qty}`;
+  })
+  .join("\n");
+
 
   const message = `${date}\n===入力数===\n${inputList}\n===発注数===\n${orderList}\n===========`;
 
@@ -559,6 +560,7 @@ async function finalizeRecord(userId, replyToken) {
 app.get("/", (req, res) => res.send("LINE Webhook server is running."));
 const PORT = process.env.PORT || 3000;
 app.listen(PORT, () => console.log(`✅ Server running on port ${PORT}`));
+
 
 
 
