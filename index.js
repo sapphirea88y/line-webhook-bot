@@ -174,7 +174,7 @@ const stateHandlers = {
 
     return client.replyMessage(replyToken, {
       type: "text",
-      text: "「入力」「訂正」「確認」のいずれかを送信してください。",
+      text: "「入力」「訂正」「確認」のいずれかを送信してください。\n発注だけ変更した際も「訂正」から登録してください。",
     });
   },
 
@@ -560,6 +560,7 @@ async function finalizeRecord(userId, replyToken) {
 app.get("/", (req, res) => res.send("LINE Webhook server is running."));
 const PORT = process.env.PORT || 3000;
 app.listen(PORT, () => console.log(`✅ Server running on port ${PORT}`));
+
 
 
 
