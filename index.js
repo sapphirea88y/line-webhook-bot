@@ -500,7 +500,8 @@ async function updateRecord(product, userId) {
   }
 
   rows[idx][3] = newQty;
-  await updateSheetValues(`発注記録!A${idx + 1}:F${idx + 1}`, [rows[idx]]);
+  await updateSheetValues(`発注記録!D${idx + 1}`, [[newQty]]);
+
   console.log(`✅ ${product} の残数を ${newQty} に訂正しました`);
 }
 
@@ -710,5 +711,6 @@ async function finalizeRecord(userId, replyToken) {
 app.get("/", (req, res) => res.send("LINE Webhook server is running."));
 const PORT = process.env.PORT || 3000;
 app.listen(PORT, () => console.log(`✅ Server running on port ${PORT}`));
+
 
 
