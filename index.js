@@ -496,19 +496,45 @@ async function handleInputFlow(userId, quantity, replyToken) {
   const rows = await getSheetValues("入力中!A:D");
   const todayRows = rows.filter(r => r[0] === userId && r[1] === date);
 
-  const done = todayRows.map(r => r[2]);
   const all = ["キャベツ", "プリン", "カレー"];
+  const done = todayRows.map(r => r[2]);
   const remaining = all.filter(item => !done.includes(item));
 
-  const currentProduct = remaining.length === 0 ? null : remaining[0];
+  // 今入力すべき商品を取得
+  const currentProduct = remaining.length > 0 ? remaining[0] : null;
+
   if (!currentProduct) {
-    await client.replyMessage(replyToken, {
+    // 全部入力済み
+    await setUserState(userId, STATE.登録確認中);
+    return client.replyMessage(replyToken, {
       type: "text",
       text: "３つすべての入力が完了しました。登録しますか？（はい／いいえ）",
     });
-    await setUserState(userId, STATE.登録確認中);
-    return;
   }
+
+  // 現在の商品を記録
+  await recordTempData(userId, currentProduct, quantity);
+
+  // 残りリストを再計算
+  const updatedRows = await getSheetValues("入力中!A:D");
+  const updatedTodayRows = updatedRows.filter(r => r[0] === userId && r[1] === date);
+  const doneNow = updatedTodayRows.map(r => r[2]);
+  const nextRemaining = all.filter(item => !doneNow.includes(item));
+
+  if (nextRemaining.length === 0) {
+    await setUserState(userId, STATE.登録確認中);
+    return client.replyMessage(replyToken, {
+      type: "text",
+      text: "３つすべての入力が完了しました。登録しますか？（はい／いいえ）",
+    });
+  }
+
+  await client.replyMessage(replyToken, {
+    type: "text",
+    text: `${nextRemaining[0]}の残数を数字で入力してください。`,
+  });
+}
+
 
   // 今の商品の数量を保存
   await recordTempData(userId, currentProduct, quantity);
@@ -771,6 +797,7 @@ async function finalizeRecord(userId, replyToken) {
 app.get("/", (req, res) => res.send("LINE Webhook server is running."));
 const PORT = process.env.PORT || 3000;
 app.listen(PORT, () => console.log(`✅ Server running on port ${PORT}`));
+
 
 
 
