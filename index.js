@@ -330,14 +330,22 @@ async [STATE.訂正確認入力中]({ text, userId, replyToken }) {
   const product = await getTempData(userId);
 
   if (text === "はい") {
-    await updateRecord(product, userId);     // 発注記録の更新
-    await clearTempData(userId);             // ← ★ 入力中シートから削除（ここを追加）
-    await setUserState(userId, STATE.通常);  // 状態リセット
-    return client.replyMessage(replyToken, {
-      type: "text",
-      text: `${product}の残数を訂正しました。`,
-    });
-  }
+  await updateRecord(product, userId);     // 発注記録の更新
+
+  // ここで新しい発注数を取得して返信文に含める
+  const date = getTargetDateString();
+  const rows = await getSheetValues("発注記録!A:F");
+  const row = rows.find(r => r[0] === date && r[2] === product && r[5] === userId);
+  const newOrder = row ? row[4] || 0 : 0;
+
+  await clearTempData(userId);
+  await setUserState(userId, STATE.通常);
+
+  return client.replyMessage(replyToken, {
+    type: "text",
+    text: `${product}の残数を訂正しました。\n新しい発注数は${newOrder}です。`,
+  });
+}
 
   if (text === "いいえ") {
     // ※この場合はまだ続けるため、入力中シートは消さない
@@ -711,6 +719,7 @@ async function finalizeRecord(userId, replyToken) {
 app.get("/", (req, res) => res.send("LINE Webhook server is running."));
 const PORT = process.env.PORT || 3000;
 app.listen(PORT, () => console.log(`✅ Server running on port ${PORT}`));
+
 
 
 
