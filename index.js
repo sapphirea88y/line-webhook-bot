@@ -94,6 +94,7 @@ const STATE = {
   通常: '通常',
   入力確認中: '入力確認中',
   入力中: '入力中',
+  入力上書き確認中: '入力上書き確認中',
   登録確認中: '登録確認中',
   訂正確認中: '訂正確認中',
   訂正選択中: '訂正選択中',
@@ -142,12 +143,26 @@ async function handleMessage(event) {
 // ===== 入力開始 =====
 async function handleInputStart(userId, replyToken) {
   const date = getJSTDateString();
+
+  // そのユーザー・日付の既存行を確認
+  const rows = await getSheetValues("発注記録!A:F");
+  const exists = rows.some(r => r[0] === date && r[5] === userId);
+
+  if (exists) {
+    await setUserState(userId, STATE.入力上書き確認中);
+    return client.replyMessage(replyToken, {
+      type: "text",
+      text: `${date}は既に入力されていますが、再度入力して上書きしますか？（はい／いいえ）`,
+    });
+  }
+
   await setUserState(userId, STATE.入力確認中);
   await client.replyMessage(replyToken, {
     type: "text",
     text: `${date}日の入力を始めますか？（はい／いいえ）`,
   });
 }
+
 
 // ===== 訂正開始 =====
 async function handleCorrectionStart(userId, replyToken) {
@@ -194,6 +209,31 @@ const stateHandlers = {
       text: "「はい」または「いいえ」と送信してください。",
     });
   },
+
+  async [STATE.入力上書き確認中]({ text, userId, replyToken }) {
+  const date = getJSTDateString();
+  if (text === "はい") {
+    // 一時データも消してから開始
+    await clearTempData(userId);
+    await deleteUserRecordsForDate(userId, date); // ← 後で作る
+    await setUserState(userId, STATE.入力確認中);
+    return client.replyMessage(replyToken, {
+      type: "text",
+      text: `${date}の既存データを削除しました。\n再入力を開始しますか？（はい／いいえ）`,
+    });
+  }
+  if (text === "いいえ") {
+    await setUserState(userId, STATE.通常);
+    return client.replyMessage(replyToken, {
+      type: "text",
+      text: "入力を中止しました。",
+    });
+  }
+  return client.replyMessage(replyToken, {
+    type: "text",
+    text: "「はい」または「いいえ」と送信してください。",
+  });
+},
 
   // --- 入力中（数字受け取り） ---
   async [STATE.入力中]({ text, userId, replyToken }) {
@@ -647,6 +687,18 @@ async function clearTempData(userId) {
   }
 }
 
+// --- 特定ユーザー・日付の行を削除 ---
+async function deleteUserRecordsForDate(userId, date) {
+  const rows = await getSheetValues("発注記録!A:G");
+  const remain = rows.filter(r => !(r[0] === date && r[5] === userId));
+
+  await clearSheetValues("発注記録!A:G");
+  if (remain.length > 0) {
+    await updateSheetValues("発注記録!A:G", remain.map(r => [...r]));
+  }
+  console.log(`🗑 ${date} の ${userId} の記録を削除しました`);
+}
+
 async function finalizeRecord(userId, replyToken) {
   const date = getJSTDateString();
   try {
@@ -719,6 +771,7 @@ async function finalizeRecord(userId, replyToken) {
 app.get("/", (req, res) => res.send("LINE Webhook server is running."));
 const PORT = process.env.PORT || 3000;
 app.listen(PORT, () => console.log(`✅ Server running on port ${PORT}`));
+
 
 
 
