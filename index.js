@@ -99,6 +99,12 @@ const STATE = {
   訂正選択中: '訂正選択中',
   訂正入力中: '訂正入力中',
   訂正確認入力中: '訂正確認入力中',
+  訂正種類選択中: '訂正種類選択中',   // 入力 or 発注
+  発注訂正確認中: '発注訂正確認中',   // 発注訂正開始の yes/no
+  発注訂正選択中: '発注訂正選択中',   // 材料選択
+  発注訂正入力中: '発注訂正入力中',   // 数値入力
+  発注訂正確認入力中: '発注訂正確認入力中', // yes/no 確認
+
 };
 
 // ===== メイン処理（ディスパッチ版） =====
@@ -145,24 +151,13 @@ async function handleInputStart(userId, replyToken) {
 
 // ===== 訂正開始 =====
 async function handleCorrectionStart(userId, replyToken) {
-  const date = getJSTDateString();
-  const ok = await isInputCompleteForToday(userId);
-
-  if (!ok) {
-    await setUserState(userId, STATE.通常);
-    await client.replyMessage(replyToken, {
-      type: "text",
-      text: `${date}の入力が完了していません。まず「入力」から3商品を登録してください。`,
-    });
-    return;
-  }
-
-  await setUserState(userId, STATE.訂正確認中);
+  await setUserState(userId, STATE.訂正種類選択中);
   await client.replyMessage(replyToken, {
     type: "text",
-    text: `${date}日の入力を訂正しますか？（はい／いいえ）`,
+    text: "入力数と発注数どちらを訂正しますか？（入力／発注）",
   });
 }
+
 
 // ===== 状態別ハンドラ一覧 =====
 const stateHandlers = {
@@ -227,6 +222,52 @@ const stateHandlers = {
       text: "「はい」または「いいえ」と送信してください。",
     });
   },
+
+  // --- 訂正種類選択中 ---
+async [STATE.訂正種類選択中]({ text, userId, replyToken }) {
+  if (text === "入力") {
+    // 入力訂正ルートへ
+    const date = getJSTDateString();
+    const ok = await isInputCompleteForToday(userId);
+    if (!ok) {
+      await setUserState(userId, STATE.通常);
+      return client.replyMessage(replyToken, {
+        type: "text",
+        text: `${date}の入力が完了していません。まず「入力」から3商品を登録してください。`,
+      });
+    }
+    await setUserState(userId, STATE.訂正確認中);
+    return client.replyMessage(replyToken, {
+      type: "text",
+      text: `${date}日の入力を訂正しますか？（はい／いいえ）`,
+    });
+  }
+
+  if (text === "発注") {
+    // 発注訂正ルートへ
+    const date = getTargetDateString();
+    const rows = await getSheetValues("発注記録!A:F");
+    const exists = rows.some(r => r[0] === date && r[5] === userId);
+    if (!exists) {
+      await setUserState(userId, STATE.通常);
+      return client.replyMessage(replyToken, {
+        type: "text",
+        text: `${date}の発注記録はまだありません。`,
+      });
+    }
+    await setUserState(userId, STATE.発注訂正確認中);
+    return client.replyMessage(replyToken, {
+      type: "text",
+      text: `${date}の発注数を訂正しますか？（はい／いいえ）`,
+    });
+  }
+
+  return client.replyMessage(replyToken, {
+    type: "text",
+    text: "「入力」または「発注」と送信してください。",
+  });
+},
+
 
   // --- 訂正確認中（訂正に進むか） ---
   async [STATE.訂正確認中]({ text, userId, replyToken }) {
@@ -313,6 +354,91 @@ async [STATE.訂正確認入力中]({ text, userId, replyToken }) {
     text: "「はい」または「いいえ」と送信してください。",
   });
 },
+
+  // --- 発注訂正確認中 ---
+async [STATE.発注訂正確認中]({ text, userId, replyToken }) {
+  if (text === "はい") {
+    await setUserState(userId, STATE.発注訂正選択中);
+    return client.replyMessage(replyToken, {
+      type: "text",
+      text: "訂正する材料を選んでください。（キャベツ／プリン／カレー）",
+    });
+  }
+  if (text === "いいえ") {
+    await setUserState(userId, STATE.通常);
+    return client.replyMessage(replyToken, {
+      type: "text",
+      text: "訂正を中止しました。",
+    });
+  }
+  return client.replyMessage(replyToken, {
+    type: "text",
+    text: "「はい」または「いいえ」と送信してください。",
+  });
+},
+
+// --- 発注訂正選択中 ---
+async [STATE.発注訂正選択中]({ text, userId, replyToken }) {
+  if (["キャベツ", "プリン", "カレー"].includes(text)) {
+    const date = getTargetDateString();
+    const rows = await getSheetValues("発注記録!A:F");
+    const row = rows.find(r => r[0] === date && r[2] === text && r[5] === userId);
+    const current = row ? row[4] || 0 : 0;
+    await recordTempData(userId, text);
+    await setUserState(userId, STATE.発注訂正入力中);
+    return client.replyMessage(replyToken, {
+      type: "text",
+      text: `${text}の現在の発注数は${current}です。\n訂正する数を入力してください。`,
+    });
+  }
+  return client.replyMessage(replyToken, {
+    type: "text",
+    text: "「キャベツ」「プリン」「カレー」のいずれかを送信してください。",
+  });
+},
+
+// --- 発注訂正入力中 ---
+async [STATE.発注訂正入力中]({ text, userId, replyToken }) {
+  if (isNaN(text)) {
+    return client.replyMessage(replyToken, {
+      type: "text",
+      text: "数字のみで送信してください。",
+    });
+  }
+  const product = await getTempData(userId);
+  await recordTempData(userId, product, Number(text));
+  await setUserState(userId, STATE.発注訂正確認入力中);
+  return client.replyMessage(replyToken, {
+    type: "text",
+    text: `${product}の発注数を${text}に訂正します。よろしいですか？（はい／いいえ）`,
+  });
+},
+
+// --- 発注訂正確認入力中 ---
+async [STATE.発注訂正確認入力中]({ text, userId, replyToken }) {
+  const product = await getTempData(userId);
+  if (text === "はい") {
+    await updateOrderQuantity(product, userId);
+    await clearTempData(userId);
+    await setUserState(userId, STATE.通常);
+    return client.replyMessage(replyToken, {
+      type: "text",
+      text: `${product}の発注数を訂正しました。`,
+    });
+  }
+  if (text === "いいえ") {
+    await setUserState(userId, STATE.発注訂正選択中);
+    return client.replyMessage(replyToken, {
+      type: "text",
+      text: "訂正をやり直します。訂正する材料を選んでください。（キャベツ／プリン／カレー）",
+    });
+  }
+  return client.replyMessage(replyToken, {
+    type: "text",
+    text: "「はい」または「いいえ」と送信してください。",
+  });
+},
+
 };  
 
 
@@ -357,7 +483,7 @@ async function handleInputFlow(userId, quantity, replyToken) {
 
 // --- 記録の訂正（発注記録のD列を上書き） ---
 async function updateRecord(product, userId) {
-  const date = getJSTDateString();
+  const date = getTargetDateString();
   const rows = await getSheetValues("発注記録!A:F");
   const idx = rows.findIndex(r => r[0] === date && r[2] === product && r[5] === userId);
   if (idx === -1) {
@@ -377,6 +503,30 @@ async function updateRecord(product, userId) {
   await updateSheetValues(`発注記録!A${idx + 1}:F${idx + 1}`, [rows[idx]]);
   console.log(`✅ ${product} の残数を ${newQty} に訂正しました`);
 }
+
+// --- 発注数の訂正（発注記録のE列を上書き） ---
+async function updateOrderQuantity(product, userId) {
+  const date = getTargetDateString();
+  const rows = await getSheetValues("発注記録!A:F");
+  const idx = rows.findIndex(r => r[0] === date && r[2] === product && r[5] === userId);
+  if (idx === -1) {
+    console.log("⚠ 該当行が見つかりません:", date, product, userId);
+    return;
+  }
+
+  const tempRows = await getSheetValues("入力中!A:D");
+  const last = tempRows.reverse().find(r => r[0] === userId && r[2] === product);
+  const newQty = last ? Number(last[3]) : null;
+  if (newQty === null) {
+    console.log("⚠ 新しい発注数が見つかりません");
+    return;
+  }
+
+  rows[idx][4] = newQty;
+  await updateSheetValues(`発注記録!A${idx + 1}:F${idx + 1}`, [rows[idx]]);
+  console.log(`✅ ${product} の発注数を ${newQty} に訂正しました`);
+}
+
 
 // --- 今日の3商品がすべて入力済みか判定 ---
 async function isInputCompleteForToday(userId) {
@@ -448,7 +598,7 @@ const orderList = ["キャベツ", "プリン　", "カレー　"]
 
 // ===== 一時データ操作 =====
 async function recordTempData(userId, product, quantity) {
-  const date = getJSTDateString();
+  const date = getTargetDateString();
   await appendSheetValues("入力中!A:D", [
     [userId, date, product, quantity ??  ""],
   ]);
@@ -456,7 +606,7 @@ async function recordTempData(userId, product, quantity) {
 
 async function getTempData(userId) {
   const rows = await getSheetValues("入力中!A:D");
-  const today = getJSTDateString();
+  const today = getTargetDateString();
   const userRows = rows.filter(r => r[0] === userId && r[1] === today);
   return userRows.length > 0 ? userRows[userRows.length - 1][2] : null;
 }
@@ -484,7 +634,7 @@ async function clearTempData(userId) {
   const remain = rows.filter(r => r[0] !== userId);
   await clearSheetValues("入力中!A:D");
   if (remain.length > 0) {
-    await updateSheetValues("入力中!A:D", remain);
+    await updateSheetValues("入力中!A:D", remain.map(r => [...r]));
   }
 }
 
@@ -560,16 +710,5 @@ async function finalizeRecord(userId, replyToken) {
 app.get("/", (req, res) => res.send("LINE Webhook server is running."));
 const PORT = process.env.PORT || 3000;
 app.listen(PORT, () => console.log(`✅ Server running on port ${PORT}`));
-
-
-
-
-
-
-
-
-
-
-
 
 
