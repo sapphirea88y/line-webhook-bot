@@ -535,26 +535,6 @@ async function handleInputFlow(userId, quantity, replyToken) {
   });
 }
 
-
-  // 今の商品の数量を保存
-  await recordTempData(userId, currentProduct, quantity);
-
-  const nextRemaining = all.filter(item => ![...done, currentProduct].includes(item));
-  if (nextRemaining.length === 0) {
-    await client.replyMessage(replyToken, {
-      type: "text",
-      text: "３つすべての入力が完了しました。登録しますか？（はい／いいえ）",
-    });
-    await setUserState(userId, STATE.登録確認中);
-    return;
-  }
-
-  await client.replyMessage(replyToken, {
-    type: "text",
-    text: `${nextRemaining[0]}の残数を数字で入力してください。`,
-  });
-}
-
 // --- 記録の訂正（発注記録のD列を上書き） ---
 async function updateRecord(product, userId) {
   const date = getTargetDateString();
@@ -673,7 +653,7 @@ const orderList = ["キャベツ", "プリン　", "カレー　"]
 
 // ===== 一時データ操作 =====
 async function recordTempData(userId, product, quantity) {
-  const date = getTargetDateString();
+  const date = getJSTDateString();
   await appendSheetValues("入力中!A:D", [
     [userId, date, product, quantity ??  ""],
   ]);
@@ -797,9 +777,3 @@ async function finalizeRecord(userId, replyToken) {
 app.get("/", (req, res) => res.send("LINE Webhook server is running."));
 const PORT = process.env.PORT || 3000;
 app.listen(PORT, () => console.log(`✅ Server running on port ${PORT}`));
-
-
-
-
-
-
