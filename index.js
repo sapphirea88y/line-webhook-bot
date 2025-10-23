@@ -89,6 +89,30 @@ app.post('/webhook', middleware(LINE_CONFIG), async (req, res) => {
   res.sendStatus(200);
 });
 
+// ======== 確認メッセージを生成するだけの関数 ========
+async function generateConfirmText(userId) {
+  const date = getJSTDateString();
+  const sheetName = "発注記録";
+  const rows = await getSheetValues(`${sheetName}!A:G`);
+  const userRows = rows.filter(r => r[5] === userId && r[0] === date);
+
+  if (userRows.length === 0) {
+    return `${date}の記録は見つかりませんでした。`;
+  }
+
+  let inputPart = "===入力数===\n";
+  let orderPart = "===発注数===\n";
+
+  for (const r of userRows) {
+    const item = (r[2] || "").padEnd(4, "　");
+    inputPart += `${item}：${r[3] || 0}\n`;
+    orderPart += `${item}：${r[4] || 0}\n`;
+  }
+
+  return `${date}\n${inputPart}${orderPart}===========`;
+}
+
+
 // ===== 状態定数 =====
 const STATE = {
   通常: '通常',
@@ -613,40 +637,11 @@ function getTargetDateString() {
 
 // ===== 確認機能 =====
 async function handleConfirmRequest(userId, replyToken) {
-  const date = getTargetDateString();
-  const rows = await getSheetValues("発注記録!A:F");
-  const targetRows = rows.filter(r => r[0] === date && r[5] === userId);
+  const confirmText = await generateConfirmText(userId);
 
-  if (targetRows.length === 0) {
-    await client.replyMessage(replyToken, {
-      type: "text",
-      text: `${date}の記録は見つかりませんでした。`,
-    });
-    return;
-  }
-
-  const inputList = ["キャベツ", "プリン　", "カレー　"]
-  .map(item => {
-    const row = targetRows.find(r => r[2] === item.trim());
-    const qty = row ? row[3] || 0 : 0;  // ← r → row に修正
-    return `${item}：${qty}`;
-  })
-  .join("\n");
-
-const orderList = ["キャベツ", "プリン　", "カレー　"]
-  .map(item => {
-    const row = targetRows.find(r => r[2] === item.trim());
-    const qty = row ? row[4] || 0 : 0;  // ← 同じく修正
-    return `${item}：${qty}`;
-  })
-  .join("\n");
-
-
-  const message = `${date}\n===入力数===\n${inputList}\n===発注数===\n${orderList}\n===========`;
-
-  await client.replyMessage(replyToken, {
+  return client.replyMessage(replyToken, {
     type: "text",
-    text: message,
+    text: confirmText,
   });
 }
 
@@ -764,13 +759,12 @@ async function finalizeRecord(userId, replyToken) {
     const summary = todayRows.map(([, , product, qty]) => `${product}：${qty}個`).join("\n");
     await clearTempData(userId);
     await setUserState(userId, STATE.通常);
+    const confirmText = await generateConfirmText(userId);
     await client.replyMessage(replyToken, {
-  type: "text",
-  text: `本日の発注内容を登録しました。\n\n${summary}`,
-});
+    type: "text",
+    text: `本日の発注内容を登録しました。\n\n${summary}\n\n${confirmText}`,
+    });
 
-// ✅ 登録直後に確認一覧を表示
-await handleConfirmRequest(userId, replyToken);
 
   } catch (err) {
     console.error("❌ finalizeRecord エラー:", err);
@@ -782,4 +776,5 @@ await handleConfirmRequest(userId, replyToken);
 app.get("/", (req, res) => res.send("LINE Webhook server is running."));
 const PORT = process.env.PORT || 3000;
 app.listen(PORT, () => console.log(`✅ Server running on port ${PORT}`));
+
 
