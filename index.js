@@ -282,7 +282,7 @@ const stateHandlers = {
 
   // --- 登録確認中（3商品入力完了後） ---
   async [STATE.登録確認中]({ text, userId, replyToken }) {
-    if (text === "はい") return (userId, replyToken);
+    if (text === "はい") return finalizeRecord(userId, replyToken);
     if (text === "いいえ") {
       await clearTempData(userId);
       await setUserState(userId, STATE.通常);
@@ -798,5 +798,6 @@ async function finalizeRecord(userId, replyToken) {
 app.get("/", (req, res) => res.send("LINE Webhook server is running."));
 const PORT = process.env.PORT || 3000;
 app.listen(PORT, () => console.log(`✅ Server running on port ${PORT}`));
+
 
 
