@@ -711,7 +711,7 @@ async function deleteUserRecordsForDate(userId, date) {
 }
 
 async function finalizeRecord(userId, replyToken) {
-  const date = getJSTDateString();
+  const date = getTargetDateString();
   try {
     const tempRows = await getSheetValues("入力中!A:D");
     const todayRows = tempRows.filter(r => r[0] === userId && r[1] === date);
@@ -787,6 +787,7 @@ async function finalizeRecord(userId, replyToken) {
 app.get("/", (req, res) => res.send("LINE Webhook server is running."));
 const PORT = process.env.PORT || 3000;
 app.listen(PORT, () => console.log(`✅ Server running on port ${PORT}`));
+
 
 
 
