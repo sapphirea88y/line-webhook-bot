@@ -91,7 +91,7 @@ app.post('/webhook', middleware(LINE_CONFIG), async (req, res) => {
 
 // ======== 確認メッセージを生成するだけの関数 ========
 async function generateConfirmText(userId) {
-  const date = getJSTDateString();
+  const date = getTargetDateString();
   const sheetName = "発注記録";
   const rows = await getSheetValues(`${sheetName}!A:G`);
   const userRows = rows.filter(r => r[5] === userId && r[0] === date);
@@ -166,7 +166,7 @@ async function handleMessage(event) {
 
 // ===== 入力開始 =====
 async function handleInputStart(userId, replyToken) {
-  const date = getJSTDateString();
+  const date = getTargetDateString();
 
   // そのユーザー・日付の既存行を確認
   const rows = await getSheetValues("発注記録!A:F");
@@ -246,7 +246,7 @@ const stateHandlers = {
   },
 
   async [STATE.入力上書き確認中]({ text, userId, replyToken }) {
-  const date = getJSTDateString();
+  const date = getTargetDateString();
   if (text === "はい") {
   await clearTempData(userId);
   await deleteUserRecordsForDate(userId, date);
@@ -526,7 +526,7 @@ async [STATE.発注訂正確認入力中]({ text, userId, replyToken }) {
 
 // --- 入力フロー（3商品の順番入力） ---
 async function handleInputFlow(userId, quantity, replyToken) {
-  const date = getJSTDateString();
+  const date = getTargetDateString();
   const rows = await getSheetValues("入力中!A:D");
   const todayRows = rows.filter(r => r[0] === userId && r[1] === date);
 
@@ -619,7 +619,7 @@ async function updateOrderQuantity(product, userId) {
 
 // --- 今日の3商品がすべて入力済みか判定 ---
 async function isInputCompleteForToday(userId) {
-  const date = getJSTDateString(); // "2025/10/20"
+  const date = getTargetDateString(); // "2025/10/20"
   const rows = await getSheetValues("発注記録!A:F");
 
   const todayRows = rows.filter(r => {
@@ -658,7 +658,7 @@ async function handleConfirmRequest(userId, replyToken) {
 
 // ===== 一時データ操作 =====
 async function recordTempData(userId, product, quantity) {
-  const date = getJSTDateString();
+  const date = getTargetDateString();
   await appendSheetValues("入力中!A:D", [
     [userId, date, product, quantity ??  ""],
   ]);
@@ -724,7 +724,7 @@ async function finalizeRecord(userId, replyToken) {
     const mainRows = await getSheetValues("発注記録!A:G");
     let rowNumber = mainRows.length + 1;
 
-    for (const [uid, d, product, qty] of todayRows) {
+    for (const [uid, _d, product, qty] of todayRows) {
       const formulaB = `=IF(A${rowNumber}="","",TEXT(A${rowNumber},"ddd"))`;
       const formulaE = `=IF(
         $A${rowNumber}="",
@@ -754,7 +754,7 @@ async function finalizeRecord(userId, replyToken) {
       const formulaG = `=IF(F${rowNumber}="","",IF($C${rowNumber}="キャベツ",TEXT($A${rowNumber}+3,"ddd"),TEXT($A${rowNumber}+2,"ddd")))`;
 
       const rowData = [
-        d,          // A
+        date,        // A
         formulaB,   // B
         product,    // C
         qty,        // D
@@ -787,6 +787,7 @@ async function finalizeRecord(userId, replyToken) {
 app.get("/", (req, res) => res.send("LINE Webhook server is running."));
 const PORT = process.env.PORT || 3000;
 app.listen(PORT, () => console.log(`✅ Server running on port ${PORT}`));
+
 
 
 
