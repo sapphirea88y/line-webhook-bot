@@ -253,7 +253,8 @@ const stateHandlers = {
 
     if (beforeRows.length > 0) {
       await clearSheetValues("一時!A:G");
-      await updateSheetValues("一時!A:G", beforeRows.map(r => [...r]));
+      const endRow = beforeRows.length;
+      await updateSheetValues(`一時!A1:G${endRow}`, beforeRows.map(r => [...r]));
     } else {
       await clearSheetValues("一時!A:G");
   }
@@ -811,6 +812,7 @@ async function finalizeRecord(userId, replyToken) {
 app.get("/", (req, res) => res.send("LINE Webhook server is running."));
 const PORT = process.env.PORT || 3000;
 app.listen(PORT, () => console.log(`✅ Server running on port ${PORT}`));
+
 
 
 
