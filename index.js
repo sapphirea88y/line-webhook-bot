@@ -94,7 +94,7 @@ async function generateConfirmText(userId) {
   const date = getTargetDateString();
   const sheetName = "発注記録";
   const rows = await getSheetValues(`${sheetName}!A:G`);
-  const userRows = rows.filter(r => r[5] === userId && r[0] === date);
+  const userRows = rows.filter(r => r[0] === date);
 
   if (userRows.length === 0) {
     return `${date}の記録は見つかりませんでした。`;
@@ -787,3 +787,4 @@ async function finalizeRecord(userId, replyToken) {
 app.get("/", (req, res) => res.send("LINE Webhook server is running."));
 const PORT = process.env.PORT || 3000;
 app.listen(PORT, () => console.log(`✅ Server running on port ${PORT}`));
+
