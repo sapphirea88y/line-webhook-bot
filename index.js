@@ -213,15 +213,14 @@ const stateHandlers = {
   async [STATE.入力上書き確認中]({ text, userId, replyToken }) {
   const date = getJSTDateString();
   if (text === "はい") {
-    // 一時データも消してから開始
-    await clearTempData(userId);
-    await deleteUserRecordsForDate(userId, date); // ← 後で作る
-    await setUserState(userId, STATE.入力確認中);
-    return client.replyMessage(replyToken, {
-      type: "text",
-      text: `${date}の既存データを削除しました。\n再入力を開始しますか？（はい／いいえ）`,
-    });
-  }
+  await clearTempData(userId);
+  await deleteUserRecordsForDate(userId, date);
+  await setUserState(userId, STATE.入力中); // ← 確認を挟まず入力開始
+  return client.replyMessage(replyToken, {
+    type: "text",
+    text: `${date}の既存データを削除しました。\nキャベツの残数を数字で入力してください。`,
+  });
+}
   if (text === "いいえ") {
     await setUserState(userId, STATE.通常);
     return client.replyMessage(replyToken, {
@@ -765,7 +764,13 @@ async function finalizeRecord(userId, replyToken) {
     const summary = todayRows.map(([, , product, qty]) => `${product}：${qty}個`).join("\n");
     await clearTempData(userId);
     await setUserState(userId, STATE.通常);
-    await client.replyMessage(replyToken, { type: "text", text: `本日の発注内容を登録しました。\n\n${summary}` });
+    await client.replyMessage(replyToken, {
+  type: "text",
+  text: `本日の発注内容を登録しました。\n\n${summary}`,
+});
+
+// ✅ 登録直後に確認一覧を表示
+await handleConfirmRequest(userId, replyToken);
 
   } catch (err) {
     console.error("❌ finalizeRecord エラー:", err);
@@ -777,3 +782,4 @@ async function finalizeRecord(userId, replyToken) {
 app.get("/", (req, res) => res.send("LINE Webhook server is running."));
 const PORT = process.env.PORT || 3000;
 app.listen(PORT, () => console.log(`✅ Server running on port ${PORT}`));
+
