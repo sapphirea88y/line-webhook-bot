@@ -248,7 +248,8 @@ const stateHandlers = {
   async [STATE.入力上書き確認中]({ text, userId, replyToken }) {
   const date = getTargetDateString();
   if (text === "はい") {
-    const beforeRows = await getSheetValues("発注記録!A:G");
+    const allRows = await getSheetValues("発注記録!A:G");
+    const beforeRows = allRows.filter(r => r[0] === date);
 
     if (beforeRows.length > 0) {
       await clearSheetValues("一時!A:G");
@@ -810,6 +811,7 @@ async function finalizeRecord(userId, replyToken) {
 app.get("/", (req, res) => res.send("LINE Webhook server is running."));
 const PORT = process.env.PORT || 3000;
 app.listen(PORT, () => console.log(`✅ Server running on port ${PORT}`));
+
 
 
 
