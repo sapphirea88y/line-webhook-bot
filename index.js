@@ -251,12 +251,14 @@ const stateHandlers = {
     const allRows = await getSheetValues("発注記録!A:G");
     const beforeRows = allRows.filter(r => r[0] === date);
 
+  try {
+    await clearSheetValues("'一時'!A:G");
     if (beforeRows.length > 0) {
-      await clearSheetValues("一時!A:G");
       const endRow = beforeRows.length;
       await updateSheetValues(`'一時'!A1:G${endRow}`, beforeRows.map(r => [...r]));
-    } else {
-      await clearSheetValues("一時!A:G");
+    }
+  } catch (e) {
+    console.warn("一時シートへのバックアップでエラー（存在しない？）:", e.message);
   }
 
   await clearTempData(userId);
@@ -726,7 +728,7 @@ async function finalizeRecord(userId, replyToken) {
   const date = getTargetDateString();
   try {
     // ===== 再入力で上書きする前の発注数チェック =====
-  const beforeRows = (await getSheetValues("一時!A:G")) || [];
+  const beforeRows = (await getSheetValues("'一時'!A:G")) || [];
 
     // 「E列」が数値で、関数ではない行を抽出（= 手入力で上書きされた発注数）
     const restoredList = beforeRows
@@ -805,13 +807,14 @@ async function finalizeRecord(userId, replyToken) {
     await client.replyMessage(replyToken, { type: "text", text: "登録中にエラーが発生しました。" });
   }
 
-  await clearSheetValues("一時!A:G");
+  await clearSheetValues("'一時'!A:G");
 }
 
 // ===== サーバー起動 =====
 app.get("/", (req, res) => res.send("LINE Webhook server is running."));
 const PORT = process.env.PORT || 3000;
 app.listen(PORT, () => console.log(`✅ Server running on port ${PORT}`));
+
 
 
 
