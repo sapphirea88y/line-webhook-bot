@@ -190,12 +190,23 @@ async function handleInputStart(userId, replyToken) {
 
 // ===== 訂正開始 =====
 async function handleCorrectionStart(userId, replyToken) {
+  const now = getJSTDate();
+  const targetDate = getTargetDateString(); // 11時前なら前日、以降なら当日
+  let note = "";
+
+  if (now.getHours() < 11) {
+    note = "\n※昨日分の入力と発注の訂正です。";
+  } else {
+    note = `\n※${targetDate}分の入力と発注の訂正です。`;
+  }
+
   await setUserState(userId, STATE.訂正種類選択中);
   await client.replyMessage(replyToken, {
     type: "text",
-    text: "入力数と発注数どちらを訂正しますか？（入力／発注）",
+    text: `入力数と発注数どちらを訂正しますか？（入力／発注）${note}`,
   });
 }
+
 
 
 // ===== 状態別ハンドラ一覧 =====
@@ -776,5 +787,6 @@ async function finalizeRecord(userId, replyToken) {
 app.get("/", (req, res) => res.send("LINE Webhook server is running."));
 const PORT = process.env.PORT || 3000;
 app.listen(PORT, () => console.log(`✅ Server running on port ${PORT}`));
+
 
 
