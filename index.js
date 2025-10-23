@@ -623,7 +623,7 @@ async function updateOrderQuantity(product, userId) {
   }
 
   rows[idx][4] = newQty;
-  await updateSheetValues(`発注記録!D${idx + 1}:E${idx + 1}`, [[rows[idx][3], rows[idx][4]]]);
+  await updateSheetValues(`発注記録!E${idx + 1}`, [[rows[idx][4]]]);
   console.log(`✅ ${product} の発注数を ${newQty} に訂正しました`);
 }
 
@@ -725,7 +725,7 @@ async function finalizeRecord(userId, replyToken) {
   const date = getTargetDateString();
   try {
     // ===== 再入力で上書きする前の発注数チェック =====
-  const beforeRows = await getSheetValues("一時!A:G");
+  const beforeRows = (await getSheetValues("一時!A:G")) || [];
 
     // 「E列」が数値で、関数ではない行を抽出（= 手入力で上書きされた発注数）
     const restoredList = beforeRows
@@ -811,6 +811,7 @@ async function finalizeRecord(userId, replyToken) {
 app.get("/", (req, res) => res.send("LINE Webhook server is running."));
 const PORT = process.env.PORT || 3000;
 app.listen(PORT, () => console.log(`✅ Server running on port ${PORT}`));
+
 
 
 
