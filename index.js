@@ -282,7 +282,7 @@ const stateHandlers = {
 
   // --- 登録確認中（3商品入力完了後） ---
   async [STATE.登録確認中]({ text, userId, replyToken }) {
-    if (text === "はい") return finalizeRecord(userId, replyToken);
+    if (text === "はい") return (userId, replyToken);
     if (text === "いいえ") {
       await clearTempData(userId);
       await setUserState(userId, STATE.通常);
@@ -713,6 +713,19 @@ async function deleteUserRecordsForDate(userId, date) {
 async function finalizeRecord(userId, replyToken) {
   const date = getTargetDateString();
   try {
+    // ===== 再入力で上書きする前の発注数チェック =====
+  const beforeRows = await getSheetValues("発注記録!A:G");
+
+    // 「E列」が数値で、関数ではない行を抽出（= 手入力で上書きされた発注数）
+    const restoredList = beforeRows
+      .filter(r => r[0] === date && r[4] && !String(r[4]).startsWith('='))
+      .map(r => `${r[2]}：${r[4]} → 関数に戻しました`);
+
+      let restoredText = "";
+      if (restoredList.length > 0) {
+      restoredText = `（以下の発注数を元に戻しました）\n${restoredList.join("\n")}\n\n`;
+    }
+
     const tempRows = await getSheetValues("入力中!A:D");
     const todayRows = tempRows.filter(r => r[0] === userId && r[1] === date);
 
@@ -772,11 +785,9 @@ async function finalizeRecord(userId, replyToken) {
     await setUserState(userId, STATE.通常);
     const confirmText = await generateConfirmText(userId);
     await client.replyMessage(replyToken, {
-    type: "text",
-    text: `本日の発注内容を登録しました。\n\n${summary}\n\n${confirmText}`,
+      type: "text",
+      text: `${restoredText}本日の発注内容を登録しました。\n\n${summary}\n\n${confirmText}`,
     });
-
-
   } catch (err) {
     console.error("❌ finalizeRecord エラー:", err);
     await client.replyMessage(replyToken, { type: "text", text: "登録中にエラーが発生しました。" });
@@ -787,4 +798,5 @@ async function finalizeRecord(userId, replyToken) {
 app.get("/", (req, res) => res.send("LINE Webhook server is running."));
 const PORT = process.env.PORT || 3000;
 app.listen(PORT, () => console.log(`✅ Server running on port ${PORT}`));
+
 
