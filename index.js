@@ -301,7 +301,7 @@ const stateHandlers = {
 async [STATE.訂正種類選択中]({ text, userId, replyToken }) {
   if (text === "入力") {
     // 入力訂正ルートへ
-    const date = getJSTDateString();
+    const date = getTargetDateString();
     const ok = await isInputCompleteForToday(userId);
     if (!ok) {
       await setUserState(userId, STATE.通常);
@@ -787,6 +787,7 @@ async function finalizeRecord(userId, replyToken) {
 app.get("/", (req, res) => res.send("LINE Webhook server is running."));
 const PORT = process.env.PORT || 3000;
 app.listen(PORT, () => console.log(`✅ Server running on port ${PORT}`));
+
 
 
 
