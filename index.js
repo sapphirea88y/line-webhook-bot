@@ -248,10 +248,17 @@ const stateHandlers = {
   async [STATE.入力上書き確認中]({ text, userId, replyToken }) {
   const date = getTargetDateString();
   if (text === "はい") {
-  await clearTempData(userId);
-  await deleteUserRecordsForDate(userId, date);
-  await setUserState(userId, STATE.入力中); // ← 確認を挟まず入力開始
-  return client.replyMessage(replyToken, {
+    if (beforeRows.length > 0) {
+      await clearSheetValues("一時!A:G");
+      await updateSheetValues("一時!A:G", beforeRows.map(r => [...r]));
+    } else {
+      await clearSheetValues("一時!A:G");
+    }
+    await updateSheetValues("一時!A:G", beforeRows.map(r => [...r]));
+    await clearTempData(userId);
+    await deleteUserRecordsForDate(userId, date);
+    await setUserState(userId, STATE.入力中); // ← 確認を挟まず入力開始
+    return client.replyMessage(replyToken, {
     type: "text",
     text: `${date}の既存データを削除しました。\nキャベツの残数を数字で入力してください。`,
   });
@@ -409,7 +416,7 @@ async [STATE.訂正確認入力中]({ text, userId, replyToken }) {
   // ここで新しい発注数を取得して返信文に含める
   const date = getTargetDateString();
   const rows = await getSheetValues("発注記録!A:F");
-  const row = rows.find(r => r[0] === date && r[2] === product && r[5] === userId);
+  const row = rows.find(r => r[0] === date && r[2] === product);
   const newOrder = row ? row[4] || 0 : 0;
 
   await clearTempData(userId);
@@ -714,7 +721,7 @@ async function finalizeRecord(userId, replyToken) {
   const date = getTargetDateString();
   try {
     // ===== 再入力で上書きする前の発注数チェック =====
-  const beforeRows = await getSheetValues("発注記録!A:G");
+  const beforeRows = await getSheetValues("一時!A:G");
 
     // 「E列」が数値で、関数ではない行を抽出（= 手入力で上書きされた発注数）
     const restoredList = beforeRows
@@ -792,12 +799,15 @@ async function finalizeRecord(userId, replyToken) {
     console.error("❌ finalizeRecord エラー:", err);
     await client.replyMessage(replyToken, { type: "text", text: "登録中にエラーが発生しました。" });
   }
+
+  await clearSheetValues("一時!A:G");
 }
 
 // ===== サーバー起動 =====
 app.get("/", (req, res) => res.send("LINE Webhook server is running."));
 const PORT = process.env.PORT || 3000;
 app.listen(PORT, () => console.log(`✅ Server running on port ${PORT}`));
+
 
 
 
