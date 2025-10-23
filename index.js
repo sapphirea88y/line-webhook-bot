@@ -170,7 +170,7 @@ async function handleInputStart(userId, replyToken) {
 
   // そのユーザー・日付の既存行を確認
   const rows = await getSheetValues("発注記録!A:F");
-  const exists = rows.some(r => r[0] === date && r[5] === userId);
+  const exists = rows.some(r => r[0] === date);
 
   if (exists) {
     await setUserState(userId, STATE.入力上書き確認中);
@@ -573,7 +573,7 @@ async function handleInputFlow(userId, quantity, replyToken) {
 async function updateRecord(product, userId) {
   const date = getTargetDateString();
   const rows = await getSheetValues("発注記録!A:F");
-  const idx = rows.findIndex(r => r[0] === date && r[2] === product && r[5] === userId);
+  const idx = rows.findIndex(r => r[0] === date && r[2] === product);
   if (idx === -1) {
     console.log("⚠ 該当行が見つかりません:", date, product, userId);
     return;
@@ -612,7 +612,7 @@ async function updateOrderQuantity(product, userId) {
   }
 
   rows[idx][4] = newQty;
-  await updateSheetValues(`発注記録!A${idx + 1}:F${idx + 1}`, [rows[idx]]);
+  await updateSheetValues(`発注記録!D${idx + 1}:E${idx + 1}`, [[rows[idx][3], rows[idx][4]]]);
   console.log(`✅ ${product} の発注数を ${newQty} に訂正しました`);
 }
 
@@ -787,6 +787,7 @@ async function finalizeRecord(userId, replyToken) {
 app.get("/", (req, res) => res.send("LINE Webhook server is running."));
 const PORT = process.env.PORT || 3000;
 app.listen(PORT, () => console.log(`✅ Server running on port ${PORT}`));
+
 
 
 
