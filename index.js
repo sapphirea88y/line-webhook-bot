@@ -321,7 +321,7 @@ async [STATE.訂正種類選択中]({ text, userId, replyToken }) {
     // 発注訂正ルートへ
     const date = getTargetDateString();
     const rows = await getSheetValues("発注記録!A:F");
-    const exists = rows.some(r => r[0] === date && r[5] === userId);
+    const exists = rows.some(r => r[0] === date);
     if (!exists) {
       await setUserState(userId, STATE.通常);
       return client.replyMessage(replyToken, {
@@ -464,7 +464,7 @@ async [STATE.発注訂正選択中]({ text, userId, replyToken }) {
   if (["キャベツ", "プリン", "カレー"].includes(text)) {
     const date = getTargetDateString();
     const rows = await getSheetValues("発注記録!A:F");
-    const row = rows.find(r => r[0] === date && r[2] === text && r[5] === userId);
+    const row = rows.find(r => r[0] === date && r[2] === text);
     const current = row ? row[4] || 0 : 0;
     await recordTempData(userId, text);
     await setUserState(userId, STATE.発注訂正入力中);
@@ -597,7 +597,7 @@ async function updateRecord(product, userId) {
 async function updateOrderQuantity(product, userId) {
   const date = getTargetDateString();
   const rows = await getSheetValues("発注記録!A:F");
-  const idx = rows.findIndex(r => r[0] === date && r[2] === product && r[5] === userId);
+  const idx = rows.findIndex(r => r[0] === date && r[2] === product);
   if (idx === -1) {
     console.log("⚠ 該当行が見つかりません:", date, product, userId);
     return;
@@ -701,7 +701,7 @@ async function clearTempData(userId) {
 // --- 特定ユーザー・日付の行を削除 ---
 async function deleteUserRecordsForDate(userId, date) {
   const rows = await getSheetValues("発注記録!A:G");
-  const remain = rows.filter(r => !(r[0] === date && r[5] === userId));
+  const remain = rows.filter(r => r[0] !== date);
 
   await clearSheetValues("発注記録!A:G");
   if (remain.length > 0) {
@@ -787,10 +787,3 @@ async function finalizeRecord(userId, replyToken) {
 app.get("/", (req, res) => res.send("LINE Webhook server is running."));
 const PORT = process.env.PORT || 3000;
 app.listen(PORT, () => console.log(`✅ Server running on port ${PORT}`));
-
-
-
-
-
-
-
