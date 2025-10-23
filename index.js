@@ -248,21 +248,24 @@ const stateHandlers = {
   async [STATE.入力上書き確認中]({ text, userId, replyToken }) {
   const date = getTargetDateString();
   if (text === "はい") {
+    const beforeRows = await getSheetValues("発注記録!A:G");
+
     if (beforeRows.length > 0) {
       await clearSheetValues("一時!A:G");
       await updateSheetValues("一時!A:G", beforeRows.map(r => [...r]));
     } else {
       await clearSheetValues("一時!A:G");
-    }
-    await updateSheetValues("一時!A:G", beforeRows.map(r => [...r]));
-    await clearTempData(userId);
-    await deleteUserRecordsForDate(userId, date);
-    await setUserState(userId, STATE.入力中); // ← 確認を挟まず入力開始
-    return client.replyMessage(replyToken, {
+  }
+
+  await clearTempData(userId);
+  await deleteUserRecordsForDate(userId, date);
+  await setUserState(userId, STATE.入力中);
+  return client.replyMessage(replyToken, {
     type: "text",
     text: `${date}の既存データを削除しました。\nキャベツの残数を数字で入力してください。`,
   });
 }
+
   if (text === "いいえ") {
     await setUserState(userId, STATE.通常);
     return client.replyMessage(replyToken, {
@@ -807,6 +810,7 @@ async function finalizeRecord(userId, replyToken) {
 app.get("/", (req, res) => res.send("LINE Webhook server is running."));
 const PORT = process.env.PORT || 3000;
 app.listen(PORT, () => console.log(`✅ Server running on port ${PORT}`));
+
 
 
 
