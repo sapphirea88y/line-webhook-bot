@@ -786,7 +786,7 @@ async function finalizeRecord(userId, replyToken) {
     const confirmText = await generateConfirmText(userId);
     await client.replyMessage(replyToken, {
       type: "text",
-      text: `${restoredText}本日の発注内容を登録しました。\n\n${summary}\n\n${confirmText}`,
+      text: `${restoredText}本日のクローズ入力を登録しました。\n\n${summary}\n\n${confirmText}`,
     });
   } catch (err) {
     console.error("❌ finalizeRecord エラー:", err);
@@ -798,3 +798,4 @@ async function finalizeRecord(userId, replyToken) {
 app.get("/", (req, res) => res.send("LINE Webhook server is running."));
 const PORT = process.env.PORT || 3000;
 app.listen(PORT, () => console.log(`✅ Server running on port ${PORT}`));
+
