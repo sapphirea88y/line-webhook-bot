@@ -146,7 +146,7 @@ async function handleMessage(event) {
   } catch (err) {
     console.error("⚠ ログ記録エラー:", err);
   }
-  console.log(`🗣 ${userId} (${state}) → ${text}`);
+    //console.log(`🗣 ${userId} (${state}) → ${text}`);
 
   // 共通キャンセル
   if (text === "キャンセル") {
@@ -799,5 +799,6 @@ async function finalizeRecord(userId, replyToken) {
 app.get("/", (req, res) => res.send("LINE Webhook server is running."));
 const PORT = process.env.PORT || 3000;
 app.listen(PORT, () => console.log(`✅ Server running on port ${PORT}`));
+
 
 
