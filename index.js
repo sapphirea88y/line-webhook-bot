@@ -777,7 +777,7 @@ async function finalizeRecord(userId, replyToken) {
       ];
 
       await updateSheetValues(`発注記録!A${rowNumber}:G${rowNumber}`, [rowData]);
-      await new Promise(r => setTimeout(r, 1000)); // 再計算待ち
+      await new Promise(r => setTimeout(r, 700)); // 再計算待ち
       rowNumber++;
     }
 
@@ -799,6 +799,7 @@ async function finalizeRecord(userId, replyToken) {
 app.get("/", (req, res) => res.send("LINE Webhook server is running."));
 const PORT = process.env.PORT || 3000;
 app.listen(PORT, () => console.log(`✅ Server running on port ${PORT}`));
+
 
 
 
