@@ -112,7 +112,6 @@ async function generateConfirmText(userId) {
   return `${date}\n${inputPart}${orderPart}===========`;
 }
 
-
 // ===== 状態定数 =====
 const STATE = {
   通常: '通常',
@@ -187,7 +186,6 @@ async function handleInputStart(userId, replyToken) {
   });
 }
 
-
 // ===== 訂正開始 =====
 async function handleCorrectionStart(userId, replyToken) {
   const now = getJSTDate();
@@ -206,8 +204,6 @@ async function handleCorrectionStart(userId, replyToken) {
     text: `入力数と発注数どちらを訂正しますか？（入力／発注）${note}`,
   });
 }
-
-
 
 // ===== 状態別ハンドラ一覧 =====
 const stateHandlers = {
@@ -520,9 +516,7 @@ async [STATE.発注訂正確認入力中]({ text, userId, replyToken }) {
     text: "「はい」または「いいえ」と送信してください。",
   });
 },
-
 };  
-
 
 // --- 入力フロー（3商品の順番入力） ---
 async function handleInputFlow(userId, quantity, replyToken) {
@@ -615,7 +609,6 @@ async function updateOrderQuantity(product, userId) {
   await updateSheetValues(`発注記録!D${idx + 1}:E${idx + 1}`, [[rows[idx][3], rows[idx][4]]]);
   console.log(`✅ ${product} の発注数を ${newQty} に訂正しました`);
 }
-
 
 // --- 今日の3商品がすべて入力済みか判定 ---
 async function isInputCompleteForToday(userId) {
